@@ -77,7 +77,7 @@ class Server:
             _LOGGER.debug("Unable to find player with id: %s", player_id)
             return None
         if name:
-            players = await self.get_players()
+            players = await self.async_get_players()
             for player in players:
                 if name.lower() == player.name.lower():
                     return player

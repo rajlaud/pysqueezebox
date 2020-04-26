@@ -58,22 +58,22 @@ async def broken_player(lms):
 
 
 async def test_get_players(lms):
-    players = await lms.get_players()
+    players = await lms.async_get_players()
     for player in players:
         assert isinstance(player, Player)
 
 
 async def test_get_player(lms, player):
     """tests get_player; SERVER must have at least one player active"""
-    test_player_a = await lms.get_player(name=player.name)
-    test_player_b = await lms.get_player(player_id=player.player_id)
+    test_player_a = await lms.async_get_player(name=player.name)
+    test_player_b = await lms.async_get_player(player_id=player.player_id)
     assert test_player_a.name == test_player_b.name
     assert test_player_a.player_id == test_player_b.player_id
 
     # test that we properly return None when there is no matching player
-    test_player_none = await lms.get_player(name="NO SUCH PLAYER")
+    test_player_none = await lms.async_get_player(name="NO SUCH PLAYER")
     assert test_player_none is None
-    test_player_none = await lms.get_player(player_id="NO SUCH ID")
+    test_player_none = await lms.async_get_player(player_id="NO SUCH ID")
     assert test_player_none is None
 
 
@@ -295,7 +295,7 @@ async def test_player_repeat(player, broken_player):
 
 
 async def test_player_sync(lms, broken_player):
-    players = await lms.get_players()
+    players = await lms.async_get_players()
     muting = {}
     sync_master = {}
 
