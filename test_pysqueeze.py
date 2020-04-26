@@ -235,7 +235,8 @@ async def test_player_load_url_and_index(player, broken_player):
     assert player.current_track["url"] == TEST_URIS[2]
 
     await player.async_clear_playlist()
-    await player.async_load_playlist(playlist, "add")
+    if playlist:
+        await player.async_load_playlist(playlist, "add")
 
 
 async def test_player_playlist(player, broken_player):

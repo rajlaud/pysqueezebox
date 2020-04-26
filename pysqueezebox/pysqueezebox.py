@@ -28,6 +28,7 @@ TIMEOUT = 10
 REPEAT_MODE = ['none', 'song', 'playlist']
 SHUFFLE_MODE = ['none', 'song', 'album']
 
+
 class Server:
     """
     Represents a Logitech media server.
@@ -145,6 +146,7 @@ class Player:
         self._lms = lms
         self._id = player_id
         self._status = status if status else {}
+        self._playlist_timestamp = 0
         self._name = name
 
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
@@ -249,7 +251,7 @@ class Player:
 
     @property
     def current_track(self):
-        """Return playlistLoop dictionary for current track"""
+        """Return playlist_loop or remoteMeta dictionary for current track"""
         try:
             cur_index = int(self._status["playlist_cur_index"])
             return self._status["playlist_loop"][cur_index]
@@ -264,21 +266,21 @@ class Player:
     @property
     def title(self):
         """Return title of current playing media."""
-        if "title" in self.current_track:
+        if self.current_track and "title" in self.current_track:
             return self.current_track["title"]
         return None
 
     @property
     def artist(self):
         """Return artist of current playing media."""
-        if "artist" in self.current_track:
+        if self.current_track and "artist" in self.current_track:
             return self.current_track["artist"]
         return None
 
     @property
     def album(self):
         """Return album of current playing media."""
-        if "album" in self.current_track:
+        if self.current_track and "album" in self.current_track:
             return self.current_track["album"]
         return None
 
@@ -299,7 +301,7 @@ class Player:
     @property
     def url(self):
         """Return the url for the currently playing media."""
-        if "url" in self.current_track:
+        if self.current_track and "url" in self.current_track:
             return self.current_track["url"]
         return None
 
@@ -351,10 +353,18 @@ class Player:
         successful, False if update fails.
         """
         tags = "adKlu"
-        response = await self.async_query("status", "0", "100", f"tags:{tags}")
+        response = await self.async_query("status", "-", "1", f"tags:{tags}")
 
         if response is False:
             return False
+
+        if "playlist_timestamp" in response and "playlist_tracks" in response:
+            if response["playlist_timestamp"] > self._playlist_timestamp:
+
+                # poll server again for full playlist, which has changed
+                response = await self.async_query("status", "0",
+                                                  response["playlist_tracks"],
+                                                  f"tags:{tags}")
 
         self._status = {}
         self._status.update(response)
