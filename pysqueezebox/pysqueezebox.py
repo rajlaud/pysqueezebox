@@ -116,6 +116,15 @@ class Server:
 
                 data = await response.json()
 
+        except aiohttp.ServerDisconnectedError as error:
+            # LMS handles an unknown player by abruptly disconnecting
+            if player and not self.async_get_player(player):
+                # player used for query does not exist
+                _LOGGER.info("Query run on unknown player %s", player)
+            else:
+                _LOGGER.error("Failed communicating with LMS: %s", type(error))
+            return False
+
         except (asyncio.TimeoutError, aiohttp.ClientError) as error:
             _LOGGER.error("Failed communicating with LMS: %s", type(error))
             return False
