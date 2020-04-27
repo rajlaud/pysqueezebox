@@ -1,6 +1,7 @@
 """
-This a library to control a Logitech Media Server asynchronously, intended for
-integration with Home Assistant.
+This a library to control a Logitech Media Server asynchronously.
+
+This library was created for integration with Home Assistant.
 
 Much of the code was adapted from the Home Assistant squeezebox integration.
 The current convention is for all API-specific code to be part of a third
@@ -14,10 +15,11 @@ please let me know so I can credit you here.
 
 (c) 2020 Raj Laud raj.laud@gmail.com
 """
-import urllib
-import logging
-import json
 import asyncio
+import json
+import logging
+import urllib
+
 import aiohttp
 import async_timeout
 
@@ -25,8 +27,8 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_PORT = 9000
 TIMEOUT = 10
-REPEAT_MODE = ['none', 'song', 'playlist']
-SHUFFLE_MODE = ['none', 'song', 'album']
+REPEAT_MODE = ["none", "song", "playlist"]
+SHUFFLE_MODE = ["none", "song", "album"]
 
 
 class Server:
@@ -38,8 +40,7 @@ class Server:
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, session, host, port=DEFAULT_PORT, username=None,
-                 password=None):
+    def __init__(self, session, host, port=DEFAULT_PORT, username=None, password=None):
         """
         Initialize the Logitech device.
 
@@ -68,7 +69,7 @@ class Server:
         return players
 
     async def async_get_player(self, player_id=None, name=None):
-        """Return Player for a device, searching by name or player_id"""
+        """Return Player for a device, searching by name or player_id."""
         if player_id:
             data = await self.async_query("status", player=player_id)
             if data:
@@ -88,7 +89,7 @@ class Server:
         return None
 
     async def async_query(self, *command, player=""):
-        """Returns result of query on the JSON-RPC connection."""
+        """Return result of query on the JSON-RPC connection."""
         auth = (
             None
             if self._username is None
@@ -153,7 +154,7 @@ class Player:
 
     def __repr__(self):
         """Return representation of Player object."""
-        return f'Player({self._lms}, {self._id}, {self._name}, {self._status}'
+        return f"Player({self._lms}, {self._id}, {self._name}, {self._status}"
 
     @property
     def name(self):
@@ -182,7 +183,8 @@ class Player:
     @property
     def volume(self):
         """
-        Returns volume level of the Player.
+        Return volume level of the Player.
+
         Returns integer from 0 to 100.
         LMS will return a negative integer if the volume is muted. This leads
         to inconsistent results if you later try to update the volume with
@@ -203,8 +205,9 @@ class Player:
     @property
     def current_title(self):
         """
-        Return title of current playing media (formatted for player). For
-        streams, this gives the title of the current track.
+        Return title of current playing media (formatted for player).
+
+        For streams, this gives the title of the current track.
         """
         if "current_title" in self._status:
             return self._status["current_title"]
@@ -221,6 +224,7 @@ class Player:
     def time(self):
         """
         Return position of current playing media in seconds.
+
         The LMS API calls this "time" so we follow that convention.
         """
         if "time" in self._status:
@@ -230,7 +234,7 @@ class Player:
     @property
     def image_url(self):
         """Return image url of current playing media."""
-        image_url = (f"/music/current/cover.jpg?player={self._id}")
+        image_url = f"/music/current/cover.jpg?player={self._id}"
 
         # pylint: disable=protected-access
         if self._lms._username:
@@ -251,7 +255,7 @@ class Player:
 
     @property
     def current_track(self):
-        """Return playlist_loop or remoteMeta dictionary for current track"""
+        """Return playlist_loop or remoteMeta dictionary for current track."""
         try:
             cur_index = int(self._status["playlist_cur_index"])
             return self._status["playlist_loop"][cur_index]
@@ -307,14 +311,14 @@ class Player:
 
     @property
     def playlist(self):
-        """Return the current playlist"""
+        """Return the current playlist."""
         if "playlist_loop" in self._status:
             return self._status["playlist_loop"]
         return None
 
     @property
     def synced(self):
-        """Return true if currently synced"""
+        """Return true if currently synced."""
         if "sync_master" in self._status:
             return self._status["sync_master"]
         return None
@@ -336,7 +340,7 @@ class Player:
     @property
     def sync_group(self):
         """Return the player ids of all players in current sync group."""
-        sync_group = [self.player_id]
+        sync_group = []
         if self.sync_slaves:
             sync_group.append(self.sync_slaves)
         if self.sync_master:
@@ -349,8 +353,9 @@ class Player:
 
     async def async_update(self):
         """
-        Update the current state of the player. Return True if
-        successful, False if update fails.
+        Update the current state of the player.
+
+        Return True if successful, False if update fails.
         """
         tags = "adKlu"
         response = await self.async_query("status", "-", "1", f"tags:{tags}")
@@ -360,11 +365,11 @@ class Player:
 
         if "playlist_timestamp" in response and "playlist_tracks" in response:
             if response["playlist_timestamp"] > self._playlist_timestamp:
-
+                self._playlist_timestamp = response["playlist_timestamp"]
                 # poll server again for full playlist, which has changed
-                response = await self.async_query("status", "0",
-                                                  response["playlist_tracks"],
-                                                  f"tags:{tags}")
+                response = await self.async_query(
+                    "status", "0", response["playlist_tracks"], f"tags:{tags}"
+                )
 
         self._status = {}
         self._status.update(response)
@@ -481,7 +486,7 @@ class Player:
 
         if not other_player_id:
             raise RuntimeError(
-                'async_sync called without other_player or other_player_id'
+                "async_sync called without other_player or other_player_id"
             )
 
         return await self.async_query("sync", other_player_id)
