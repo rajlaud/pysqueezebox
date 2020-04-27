@@ -118,7 +118,7 @@ class Server:
 
         except aiohttp.ServerDisconnectedError as error:
             # LMS handles an unknown player by abruptly disconnecting
-            if player and not self.async_get_player(player):
+            if player and not await self.async_get_player(player):
                 # player used for query does not exist
                 _LOGGER.info("Query run on unknown player %s", player)
             else:
@@ -243,7 +243,12 @@ class Player:
     @property
     def image_url(self):
         """Return image url of current playing media."""
-        image_url = f"/music/current/cover.jpg?player={self._id}"
+        if self.current_track and "artwork_url" in self.current_track:
+            image_url = self.current_track["artwork_url"]
+        elif self.current_track and "id" in self.current_track:
+            image_url = f"/music/{self.current_track['id']}/cover.jpg"
+        else:
+            image_url = f"/music/current/cover.jpg?player={self._id}"
 
         # pylint: disable=protected-access
         if self._lms._username:
@@ -268,7 +273,7 @@ class Player:
         try:
             cur_index = int(self._status["playlist_cur_index"])
             return self._status["playlist_loop"][cur_index]
-        except KeyError:
+        except (KeyError, IndexError):
             pass
         try:
             return self._status["remoteMeta"]
