@@ -118,8 +118,7 @@ class Server:
 
         except aiohttp.ServerDisconnectedError as error:
             # LMS handles an unknown player by abruptly disconnecting
-            if player and not await self.async_get_player(player):
-                # player used for query does not exist
+            if player:
                 _LOGGER.info("Query run on unknown player %s", player)
             else:
                 _LOGGER.error("Failed communicating with LMS: %s", type(error))
@@ -185,9 +184,7 @@ class Player:
     @property
     def mode(self):
         """Return the mode of the device. One of play, stop, or pause."""
-        if "mode" in self._status:
-            return self._status["mode"]
-        return None
+        return self._status.get("mode")
 
     @property
     def volume(self):
@@ -209,18 +206,12 @@ class Player:
         """Return true if volume is muted."""
         if "mixer volume" in self._status:
             return str(self._status["mixer volume"]).startswith("-")
-        return None
+        return False
 
     @property
     def current_title(self):
-        """
-        Return title of current playing media (formatted for player).
-
-        For streams, this gives the title of the current track.
-        """
-        if "current_title" in self._status:
-            return self._status["current_title"]
-        return None
+        """Return title of current playing media on remote stream."""
+        return self._status.get("current_title")
 
     @property
     def duration(self):
@@ -284,22 +275,22 @@ class Player:
     @property
     def title(self):
         """Return title of current playing media."""
-        if self.current_track and "title" in self.current_track:
-            return self.current_track["title"]
+        if self.current_track:
+            return self.current_track.get("title")
         return None
 
     @property
     def artist(self):
         """Return artist of current playing media."""
-        if self.current_track and "artist" in self.current_track:
-            return self.current_track["artist"]
+        if self.current_track:
+            return self.current_track.get("artist")
         return None
 
     @property
     def album(self):
         """Return album of current playing media."""
-        if self.current_track and "album" in self.current_track:
-            return self.current_track["album"]
+        if self.current_track:
+            return self.current_track.get("album")
         return None
 
     @property
@@ -319,37 +310,29 @@ class Player:
     @property
     def url(self):
         """Return the url for the currently playing media."""
-        if self.current_track and "url" in self.current_track:
-            return self.current_track["url"]
+        if self.current_track:
+            return self.current_track.get("url")
         return None
 
     @property
     def playlist(self):
         """Return the current playlist."""
-        if "playlist_loop" in self._status:
-            return self._status["playlist_loop"]
-        return None
+        return self._status.get("playlist_loop")
 
     @property
     def synced(self):
         """Return true if currently synced."""
-        if "sync_master" in self._status:
-            return self._status["sync_master"]
-        return None
+        return self._status.get("sync_master")
 
     @property
     def sync_master(self):
         """Return the player id of the sync group master."""
-        if "sync_master" in self._status:
-            return self._status["sync_master"]
-        return None
+        return self._status.get("sync_master")
 
     @property
     def sync_slaves(self):
         """Return the player ids of the sync group slaves."""
-        if "sync_slaves" in self._status:
-            return self._status["sync_slaves"]
-        return None
+        return self._status.get("sync_slaves")
 
     @property
     def sync_group(self):

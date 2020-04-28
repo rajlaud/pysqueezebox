@@ -1,15 +1,17 @@
-import aiohttp
 import asyncio
-import pytest
 from time import sleep
-from pysqueezebox import Server, Player
-SERVER = '192.168.2.2'
-PLAYER = 'Tape'
+
+import aiohttp
+import pytest
+from pysqueezebox import Player, Server
+
+SERVER = "192.168.2.2"
+PLAYER = "Tape"
 TEST_URIS = [
-'file:///mnt/squeezebox/music/best_quality/The%20Who/A%20Quick%20One/02%20Boris%20the%20Spider.mp3',
-'file:///mnt/squeezebox/music/best_quality/The%20Beatles/Revolver/06%20Yellow%20Submarine.flac',
-'file:///mnt/squeezebox/music/best_quality/Bob%20Marley%20&%20The%20Wailers/Catch%20A%20Fire/04%20Stop%20That%20Train.flac'
-            ]
+    "file:///mnt/squeezebox/music/best_quality/The%20Who/A%20Quick%20One/02%20Boris%20the%20Spider.mp3",
+    "file:///mnt/squeezebox/music/best_quality/The%20Beatles/Revolver/06%20Yellow%20Submarine.flac",
+    "file:///mnt/squeezebox/music/best_quality/Bob%20Marley%20&%20The%20Wailers/Catch%20A%20Fire/04%20Stop%20That%20Train.flac",
+]
 
 # All test coroutines will be treated as marked.
 pytestmark = pytest.mark.asyncio
@@ -23,6 +25,7 @@ def compare_playlists(a, b):
                 return False
         return True
     return False
+
 
 @pytest.fixture(scope="module")
 def event_loop():
@@ -77,12 +80,26 @@ async def test_get_player(lms, player):
     assert test_player_none is None
 
 
-async def test_player_properties(player):
+async def test_player_properties(player, broken_player):
     """tests each property; SERVER must have at least one player active"""
     for p in dir(Player):
         prop = getattr(Player, p)
         if isinstance(prop, property):
             print(f"{p}: {prop.fget(player)}")
+    for p in dir(Player):
+        prop = getattr(Player, p)
+        if isinstance(prop, property):
+            print(f"{p}: {prop.fget(broken_player)}")
+
+
+async def test_current_track(lms):
+    for player in await lms.async_get_players():
+        print(player.current_track)
+
+
+async def test_url(lms):
+    for player in await lms.async_get_players():
+        print(player.url)
 
 
 async def test_async_query(player):
@@ -273,7 +290,7 @@ async def test_player_shuffle(player, broken_player):
     await player.async_update()
     shuffle_mode = player.shuffle
 
-    for mode in ['none', 'song', 'album']:
+    for mode in ["none", "song", "album"]:
         assert await player.async_set_shuffle(mode)
         assert not await broken_player.async_set_shuffle(mode)
         await player.async_update()
@@ -286,7 +303,7 @@ async def test_player_repeat(player, broken_player):
     await player.async_update()
     repeat_mode = player.repeat
 
-    for mode in ['none', 'song', 'playlist']:
+    for mode in ["none", "song", "playlist"]:
         assert await player.async_set_repeat(mode)
         assert not await broken_player.async_set_repeat(mode)
         await player.async_update()
@@ -313,13 +330,19 @@ async def test_player_sync(lms, broken_player):
             assert not player.synced
         assert await player.async_sync(test_master)
         await player.async_update()
-        assert test_master.player_id in player.sync_group
+        assert (
+            test_master.player_id in player.sync_group
+            or test_master.player_id in player.player_id
+        )
         assert await player.async_unsync()
         await player.async_update()
         assert not player.synced
         assert await player.async_sync(test_master.player_id)
         await player.async_update()
-        assert test_master.player_id in player.sync_group
+        assert (
+            test_master.player_id in player.sync_group
+            or test_master.player_id in player.player_id
+        )
 
     for player in players:
         await player.async_unsync()
