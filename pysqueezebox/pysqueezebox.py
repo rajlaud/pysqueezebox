@@ -332,14 +332,16 @@ class Player:
     @property
     def sync_slaves(self):
         """Return the player ids of the sync group slaves."""
-        return self._status.get("sync_slaves")
+        if self._status.get("sync_slaves"):
+            return self._status.get("sync_slaves").split(",")
+        return None
 
     @property
     def sync_group(self):
         """Return the player ids of all players in current sync group."""
         sync_group = []
         if self.sync_slaves:
-            sync_group.append(self.sync_slaves)
+            sync_group = self.sync_slaves
         if self.sync_master:
             sync_group.append(self.sync_master)
         return sync_group
