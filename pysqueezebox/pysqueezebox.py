@@ -75,6 +75,7 @@ class Server:
                     players.append(Player(self, player["playerid"], player["name"]))
             else:
                 players.append(Player(self, player["playerid"], player["name"]))
+        _LOGGER.debug("get_players(%s) returning players: %s", search, players)
         return players
 
     async def async_get_player(self, player_id=None, name=None):
@@ -89,28 +90,30 @@ class Server:
         if player_id:
             data = await self.async_query("status", player=player_id)
             if data:
-                name = data["player_name"]
                 # an exact, case sensitive string match on the player name will
-                # also return a result. in case that happened, update player_id
-                # to what is reported by the player.
-                player_id = data["player_id"]
-                if name and player_id:
-                    return Player(self, player_id, name)
-            _LOGGER.debug("Unable to find player with id: %s", player_id)
+                # also return a result. if that happened, search on name instead
+                # to retrieve accurate player_id
+                if player_id == data.get("player_name"):
+                    _LOGGER.info(
+                        "get_player(player_id=%s) called with player name.", player_id
+                    )
+                    return await self.async_get_player(name=player_id)
+                if "player_name" in data:
+                    return Player(self, player_id, data["player_name"])
+            _LOGGER.debug("Unable to find player with player_id: %s", player_id)
             return None
         if name:
             players = await self.async_get_players(name)
             if len(players) >= 1:
                 if len(players) > 1:
                     _LOGGER.warning(
-                        "Found more than one player matching %s, return first player %s.",
-                        name,
-                        players[0],
+                        "Found more than one player matching %s.", name,
                     )
+                _LOGGER.debug("get_player(name=%s) return player %s.", name, players[0])
                 return players[0]
             _LOGGER.debug("Unable to find player with name: %s.", name)
             return None
-        _LOGGER.error("get_player called without name or player_id.")
+        _LOGGER.error("get_player() called without name or player_id.")
         return None
 
     async def async_query(self, *command, player=""):

@@ -79,6 +79,10 @@ async def test_get_player(lms, player):
     test_player_none = await lms.async_get_player(player_id="NO SUCH ID")
     assert test_player_none is None
 
+    # check that we handle a name as player_id correctly
+    test_player_c = await lms.async_get_player(player.name)
+    assert player.player_id == test_player_c.player_id
+
 
 async def test_player_properties(player, broken_player):
     """tests each property; SERVER must have at least one player active"""
