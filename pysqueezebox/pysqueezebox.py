@@ -58,34 +58,59 @@ class Server:
         self._username = username
         self._password = password
 
-    async def async_get_players(self):
-        """Return Player for each device connected to LMS."""
+    async def async_get_players(self, search=None):
+        """
+        Return Player for each device connected to LMS.
+
+        Parameters:
+            search: filter the result by case-insensitive substring (optional)
+        """
         players = []
         data = await self.async_query("players", "status")
         if data is False:
             return None
         for player in data.get("players_loop", []):
-            players.append(Player(self, player["playerid"], player["name"]))
+            if search:
+                if search.lower() in player["name"].lower():
+                    players.append(Player(self, player["playerid"], player["name"]))
+            else:
+                players.append(Player(self, player["playerid"], player["name"]))
         return players
 
     async def async_get_player(self, player_id=None, name=None):
-        """Return Player for a device, searching by name or player_id."""
+        """
+        Return Player for a device connected to server.
+
+        Parameters (one required):
+            player_id: The unique player_id reported by the server.
+            name: A substring for a case-insensitive match. Will return first of
+                  multiple matching results.
+        """
         if player_id:
             data = await self.async_query("status", player=player_id)
             if data:
                 name = data["player_name"]
-                if name:
+                # an exact, case sensitive string match on the player name will
+                # also return a result. in case that happened, update player_id
+                # to what is reported by the player.
+                player_id = data["player_id"]
+                if name and player_id:
                     return Player(self, player_id, name)
             _LOGGER.debug("Unable to find player with id: %s", player_id)
             return None
         if name:
-            players = await self.async_get_players()
-            for player in players:
-                if name.lower() == player.name.lower():
-                    return player
-            _LOGGER.debug("Unable to find player with name: %s", name)
+            players = await self.async_get_players(name)
+            if len(players) >= 1:
+                if len(players) > 1:
+                    _LOGGER.warning(
+                        "Found more than one player matching %s, return first player %s.",
+                        name,
+                        players[0],
+                    )
+                return players[0]
+            _LOGGER.debug("Unable to find player with name: %s.", name)
             return None
-        _LOGGER.error("get_player called without name or player_id")
+        _LOGGER.error("get_player called without name or player_id.")
         return None
 
     async def async_query(self, *command, player=""):
