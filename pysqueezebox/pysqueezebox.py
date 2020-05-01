@@ -116,6 +116,10 @@ class Server:
         _LOGGER.error("get_player() called without name or player_id.")
         return None
 
+    async def async_status(self):
+        """Return status of current server."""
+        return await self.async_query("serverstatus")
+
     async def async_query(self, *command, player=""):
         """Return result of query on the JSON-RPC connection."""
         auth = (
@@ -201,6 +205,20 @@ class Player:
     def player_id(self):
         """Return the player ID, which is its MAC address."""
         return self._id
+
+    @property
+    def connected(self):
+        """
+        Return True if the player is connected to the LMS server.
+
+        The API call is less useful than it sounds, because after player has
+        been disconnected for a few minutes from the server, it disappears
+        altogether from the API. We still return False, not None, because it
+        still means the player is disconnected.
+        """
+        if "player_connected" in self._status:
+            return self._status["player_connected"] == 1
+        return False
 
     @property
     def power(self):

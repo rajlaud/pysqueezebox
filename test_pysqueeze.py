@@ -60,6 +60,10 @@ async def broken_player(lms):
     yield broken_player
 
 
+async def test_server_status(lms):
+    print(await lms.async_query("serverstatus"))
+
+
 async def test_get_players(lms):
     players = await lms.async_get_players()
     for player in players:
@@ -94,6 +98,7 @@ async def test_player_properties(player, broken_player):
         prop = getattr(Player, p)
         if isinstance(prop, property):
             print(f"{p}: {prop.fget(broken_player)}")
+    assert broken_player.power is None
 
 
 async def test_current_track(lms):
