@@ -58,6 +58,8 @@ class Server:
         self._username = username
         self._password = password
 
+        self.http_status = None
+
     async def async_get_players(self, search=None):
         """
         Return Player for each device connected to LMS.
@@ -137,6 +139,7 @@ class Server:
         try:
             with async_timeout.timeout(TIMEOUT):
                 response = await self._session.post(url, data=data, auth=auth)
+                self.status = response.status
 
                 if response.status != 200:
                     _LOGGER.error(
