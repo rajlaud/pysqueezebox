@@ -29,6 +29,99 @@ DEFAULT_PORT = 9000
 TIMEOUT = 10
 REPEAT_MODE = ["none", "song", "playlist"]
 SHUFFLE_MODE = ["none", "song", "album"]
+DISCOVERY_INTERVAL = 60  # default value from Logitech Media Server code
+DISCOVERY_MESSAGE = b"eIPAD\x00NAME\x00JSON\x00UUID\x00VERS"
+BROADCAST_ADDR = ("255.255.255.255", "3483")
+
+
+def _unpack_discovery_response(data, addr):
+    """Return dict of unpacked responses from Logitech Media Server."""
+    if data[0:1] != b"E":
+        _LOGGER.debug(
+            "Received non-LMS discovery response %s from %s", data, addr,
+        )
+        _LOGGER.debug("Prefix was %s", data[0:1])
+        return None
+    data = data[1::]  # drop first byte
+    result = {"host": addr[0]}
+    while len(data) > 0:
+        tag = data[0:4].decode().lower()
+        tag_len = ord(data[4:5])  # unsigned char
+        val = data[5 : (5 + tag_len)].decode()
+        data = data[5 + tag_len : :]  # drop this unpacked response
+        result.update({tag: val})
+    return result
+
+
+class ServerDiscoveryProtocol(asyncio.DatagramProtocol):
+    """Protocol to send discovery request and receive responses."""
+
+    def __init__(self, callback, session=None):
+        """Initialize with callback function."""
+        self.transport = None
+        self.callback = callback
+        self.session = session
+
+    def connection_made(self, transport):
+        """Connect to transport."""
+        self.transport = transport
+
+    def datagram_received(self, data, addr):
+        """Test if responder is a Logitech Media Server."""
+        _LOGGER.debug("Received LMS discovery response from %s", addr)
+        response = _unpack_discovery_response(data, addr)
+        if response:
+            if "host" not in response or "json" not in response:
+                _LOGGER.info(
+                    "LMS discovery response %s does not contain enough information to connect",
+                    response,
+                )
+            if callable(self.callback):
+                result = self.callback(
+                    Server(
+                        self.session,
+                        response["host"],
+                        response["json"],
+                        name=response.get("name"),
+                        uuid=response.get("uuid"),
+                    )
+                )
+                if asyncio.iscoroutine(result):
+                    asyncio.create_task(result)
+
+
+async def async_discover(callback, session=None):
+    """
+    Search for Logitech Media Servers using the LMS UDP discovery protocol.
+
+    Will search indefinitely. To stop searching, call Task.cancel().
+
+    Parameters:
+        callback: awaitable or synchronous function to call with Server object
+                  containing discovered server (required)
+        session:  aiohttp.ClientSession for connecting to server (recommended,
+                  but can be left blank and set by callback instead)
+    """
+    loop = asyncio.get_running_loop()
+
+    transport, _ = await loop.create_datagram_endpoint(
+        lambda: ServerDiscoveryProtocol(callback),
+        remote_addr=BROADCAST_ADDR,
+        allow_broadcast=True,
+    )
+
+    try:
+        while True:
+            _LOGGER.debug("Sending discovery message.")
+            transport.sendto(DISCOVERY_MESSAGE)
+            await asyncio.sleep(DISCOVERY_INTERVAL)
+
+    except asyncio.CancelledError:
+        _LOGGER.debug("Cancelling LMS discovery task")
+        transport.close()
+
+    finally:
+        transport.close()
 
 
 class Server:
@@ -40,7 +133,16 @@ class Server:
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, session, host, port=DEFAULT_PORT, username=None, password=None):
+    def __init__(
+        self,
+        session,
+        host,
+        port=DEFAULT_PORT,
+        username=None,
+        password=None,
+        uuid=None,
+        name=None,
+    ):
         """
         Initialize the Logitech device.
 
@@ -50,15 +152,30 @@ class Server:
             port: LMS server port (optional, default 9000)
             username: LMS username (optional)
             password: LMS password (optional)
-
+            uuid: LMS uuid (optional, will be updated on first async_status() call if None)
+            name: LMS server name (optional, will be updated on first async_status() if None)
         """
         self.host = host
         self.port = port
-        self._session = session
+        self.session = session
         self._username = username
         self._password = password
 
         self.http_status = None
+        self.uuid = uuid
+        self.name = name
+
+    def __repr__(self):
+        """Return representation of Server object."""
+        return (
+            f"Server({self.session}, "
+            f"{self.host}, "
+            f"{self.port}, "
+            f"{self._username}, "
+            f"{self._password}, "
+            f"{self.uuid}, "
+            f"{self.name})"
+        )
 
     async def async_get_players(self, search=None):
         """
@@ -120,7 +237,13 @@ class Server:
 
     async def async_status(self):
         """Return status of current server."""
-        return await self.async_query("serverstatus")
+        status = await self.async_query("serverstatus")
+        if status:
+            if self.uuid is None and "uuid" in status:
+                self.uuid = status["uuid"]
+            if self.name is None and "name" in status:
+                self.name = status["name"]
+        return status
 
     async def async_query(self, *command, player=""):
         """Return result of query on the JSON-RPC connection."""
@@ -136,9 +259,12 @@ class Server:
 
         _LOGGER.debug("URL: %s Data: %s", url, data)
 
+        if self.session is None:
+            raise ValueError("async_query() called with Server.session unset")
+
         try:
             with async_timeout.timeout(TIMEOUT):
-                response = await self._session.post(url, data=data, auth=auth)
+                response = await self.session.post(url, data=data, auth=auth)
                 self.status = response.status
 
                 if response.status != 200:

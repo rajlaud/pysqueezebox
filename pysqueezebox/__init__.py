@@ -1,6 +1,7 @@
 """
-This a library to control a Logitech Media Server asynchronously, intended for
-integration with Home Assistant.
+This a library to control a Logitech Media Server asynchronously.
+
+This library is intended for integration with Home Assistant.
 
 Much of the code was adapted from the Home Assistant squeezebox integration.
 The current convention is for all API-specific code to be part of a third
@@ -17,7 +18,7 @@ please let me know so I can credit you here.
 
 import logging
 
-from .pysqueezebox import Server, Player
+from .pysqueezebox import Player, Server, async_discover
 
 # http://docs.python.org/2/howto/logging.html#library-config
 # Avoids spurious error messages if no logger is configured by the user
