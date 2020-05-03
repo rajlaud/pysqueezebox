@@ -18,7 +18,10 @@ please let me know so I can credit you here.
 
 import logging
 
-from .pysqueezebox import Player, Server, async_discover
+from .discovery import async_discover
+# pylint: disable=unused-import
+from .player import Player
+from .server import Server
 
 # http://docs.python.org/2/howto/logging.html#library-config
 # Avoids spurious error messages if no logger is configured by the user

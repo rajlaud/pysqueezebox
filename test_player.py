@@ -1,24 +1,20 @@
 import asyncio
 from time import sleep
 
-import aiohttp
 import pytest
-from pysqueezebox import Player, Server
+from pysqueezebox import Player
 
-SERVER = "192.168.2.2"
-PLAYER = "Tape"
 TEST_URIS = [
     "file:///mnt/squeezebox/music/best_quality/The%20Who/A%20Quick%20One/02%20Boris%20the%20Spider.mp3",
     "file:///mnt/squeezebox/music/best_quality/The%20Beatles/Revolver/06%20Yellow%20Submarine.flac",
     "file:///mnt/squeezebox/music/best_quality/Bob%20Marley%20&%20The%20Wailers/Catch%20A%20Fire/04%20Stop%20That%20Train.flac",
 ]
-
 # All test coroutines will be treated as marked.
 pytestmark = pytest.mark.asyncio
 
 
 def compare_playlists(a, b):
-    """compare two playlists checking only the urls"""
+    """Compare two playlists checking only the urls."""
     if len(a) == len(b):
         for x in range(0, len(a)):
             if a[x]["url"] != b[x]["url"]:
@@ -27,69 +23,8 @@ def compare_playlists(a, b):
     return False
 
 
-@pytest.fixture(scope="module")
-def event_loop():
-    loop = asyncio.get_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="module")
-async def lms(event_loop):
-    print("Created LMS session")
-    async with aiohttp.ClientSession() as session:
-        lms = Server(session, SERVER)
-        yield lms
-
-
-@pytest.fixture(scope="module")
-async def player(lms):
-    if PLAYER:
-        player = await lms.async_get_player(name=PLAYER)
-    else:
-        players = await lms.async_get_players()
-        player = players[0]
-    assert isinstance(player, Player)
-    assert await player.async_update()
-    yield player
-
-
-@pytest.fixture(scope="module")
-async def broken_player(lms):
-    broken_player = Player(lms, "NOT A PLAYER ID", "Bogus player")
-    yield broken_player
-
-
-async def test_server_status(lms):
-    print(await lms.async_query("serverstatus"))
-
-
-async def test_get_players(lms):
-    players = await lms.async_get_players()
-    for player in players:
-        assert isinstance(player, Player)
-
-
-async def test_get_player(lms, player):
-    """tests get_player; SERVER must have at least one player active"""
-    test_player_a = await lms.async_get_player(name=player.name)
-    test_player_b = await lms.async_get_player(player_id=player.player_id)
-    assert test_player_a.name == test_player_b.name
-    assert test_player_a.player_id == test_player_b.player_id
-
-    # test that we properly return None when there is no matching player
-    test_player_none = await lms.async_get_player(name="NO SUCH PLAYER")
-    assert test_player_none is None
-    test_player_none = await lms.async_get_player(player_id="NO SUCH ID")
-    assert test_player_none is None
-
-    # check that we handle a name as player_id correctly
-    test_player_c = await lms.async_get_player(player.name)
-    assert player.player_id == test_player_c.player_id
-
-
 async def test_player_properties(player, broken_player):
-    """tests each property; SERVER must have at least one player active"""
+    """Tests each player property."""
     for p in dir(Player):
         prop = getattr(Player, p)
         if isinstance(prop, property):
@@ -101,18 +36,8 @@ async def test_player_properties(player, broken_player):
     assert broken_player.power is None
 
 
-async def test_current_track(lms):
-    for player in await lms.async_get_players():
-        print(player.current_track)
-
-
-async def test_url(lms):
-    for player in await lms.async_get_players():
-        print(player.url)
-
-
 async def test_async_query(player):
-    """tests Player async_query()"""
+    """Tests Player.async_query()."""
     # test query with result
     result = await player.async_query("status")
     assert result["mode"] in ["play", "pause", "stop"]
@@ -125,7 +50,7 @@ async def test_async_query(player):
 
 
 async def test_player_power(player, broken_player):
-    """tests Player power controls"""
+    """Tests Player power controls."""
     assert await player.async_set_power(True)
     assert not await broken_player.async_set_power(True)
     await player.async_update()
@@ -139,7 +64,7 @@ async def test_player_power(player, broken_player):
 
 
 async def test_player_muting(player, broken_player):
-    """test Player muting controls"""
+    """Test Player muting controls."""
     assert await player.async_update()
     muting = player.muting
     assert await player.async_set_muting(True)
@@ -156,7 +81,7 @@ async def test_player_muting(player, broken_player):
 
 
 async def test_player_volume(player, broken_player):
-    """test Player volume controls"""
+    """Test Player volume controls."""
     assert await player.async_update()
     muting = player.muting
     assert await player.async_set_muting(True)
@@ -176,7 +101,7 @@ async def test_player_volume(player, broken_player):
 
 
 async def test_player_play_pause(player, broken_player):
-    """test play and pause controls"""
+    """Test play and pause controls."""
     assert await player.async_update()
     power = player.power
     if not power:

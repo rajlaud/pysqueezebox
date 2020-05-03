@@ -36,11 +36,11 @@ async def test_discovery(event_loop):
 
 
 def _discovery_callback(server):
-    print(server)
+    print("Synchronous callback got server: %s", server)
 
 
 async def _async_discovery_callback(server):
-    print(server)
+    print("Asynchronous callback got server: %s", server)
     try:
         await server.async_status()
     except ValueError as exc:
