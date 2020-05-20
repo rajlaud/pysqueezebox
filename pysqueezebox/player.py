@@ -118,11 +118,14 @@ class Player:
     def image_url(self):
         """Return image url of current playing media."""
         if self.current_track and "artwork_url" in self.current_track:
+            # we're playing a remote stream with an artworkd url
             image_url = self.current_track["artwork_url"]
-        elif self.current_track and "id" in self.current_track:
-            image_url = f"/music/{self.current_track['id']}/cover.jpg"
+        elif self.current_track and "coverid" in self.current_track:
+            image_url = f"/music/{self.current_track['coverid']}/cover.jpg"
         else:
-            image_url = f"/music/current/cover.jpg?player={self._id}"
+            # querying a coverid without art will result in the default image
+            # we use 'unknown' so that this image can be cached
+            image_url = f"/music/unknown/cover.jpg"
 
         # pylint: disable=protected-access
         if self._lms._username:
@@ -239,7 +242,7 @@ class Player:
 
         Return True if successful, False if update fails.
         """
-        tags = "adKlu"
+        tags = "adcKlu"
         response = await self.async_query("status", "-", "1", f"tags:{tags}")
 
         if response is False:
@@ -252,8 +255,14 @@ class Player:
                 response = await self.async_query(
                     "status", "0", response["playlist_tracks"], f"tags:{tags}"
                 )
+            else:
+                response.pop("playlist_loop", None)
+        else:
+            # no current playlist
+            self._status.update({"playlist_loop": None})
 
-        self._status = {}
+        # preserve the playlist between updates
+        self._status = {"playlist_loop": self._status.get("playlist_loop")}
         self._status.update(response)
 
         return True
@@ -318,6 +327,9 @@ class Player:
         cmd: "insert" - adds next in playlist
         cmd: "add" - adds to end of playlist
         """
+        if not playlist_ref:
+            return False
+
         success = True
         # we are going to pop the list below, so we need to copy it
         playlist = list(playlist_ref)

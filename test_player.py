@@ -9,6 +9,9 @@ TEST_URIS = [
     "file:///mnt/squeezebox/music/best_quality/The%20Beatles/Revolver/06%20Yellow%20Submarine.flac",
     "file:///mnt/squeezebox/music/best_quality/Bob%20Marley%20&%20The%20Wailers/Catch%20A%20Fire/04%20Stop%20That%20Train.flac",
 ]
+
+TEST_ALBUM = "file:///mnt/squeezebox/music/best_quality/Bob%20Marley%20&%20The%20Wailers/Catch%20A%20Fire/"
+
 # All test coroutines will be treated as marked.
 pytestmark = pytest.mark.asyncio
 
@@ -29,6 +32,7 @@ async def test_player_properties(player, broken_player):
         prop = getattr(Player, p)
         if isinstance(prop, property):
             print(f"{p}: {prop.fget(player)}")
+    print(player._status)
     for p in dir(Player):
         prop = getattr(Player, p)
         if isinstance(prop, property):
@@ -218,6 +222,41 @@ async def test_player_playlist(player, broken_player):
 
     await player.async_clear_playlist()
     await player.async_load_playlist(playlist, "add")
+
+
+async def test_player_coverart(player, broken_player):
+    await player.async_update()
+    playlist = player.playlist
+
+    await player.async_clear_playlist()
+    test_playlist = [{"url": TEST_URIS[0]}, {"url": TEST_URIS[1]}]
+    await player.async_load_playlist(test_playlist, "add")
+    await player.async_update()
+    image_urls = set()
+    image_url = player.image_url
+    assert image_url
+    image_urls.add(image_url)
+    await player.async_index("+1")
+    await player.async_update()
+    image_url = player.image_url
+    assert image_url
+    assert image_url not in image_urls
+
+    await player.async_clear_playlist()
+    await player.async_load_url(TEST_ALBUM, "add")
+    await player.async_update()
+    image_url = player.image_url
+    for track in player.playlist:
+        assert player.image_url
+        assert player.image_url == image_url  # should be identical for every track
+        await player.async_index("+1")
+        await player.async_update()
+        await asyncio.sleep(1)
+
+    await player.async_clear_playlist()
+    await player.async_load_playlist(playlist, "add")
+
+    assert "/music/unknown/cover.jpg" in broken_player.image_url
 
 
 async def test_player_shuffle(player, broken_player):
