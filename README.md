@@ -39,7 +39,7 @@ SERVER = '192.168.1.2' # ip address of Logitech Media Server
 async def main():
     async with aiohttp.ClientSession() as session:
         lms = Server(session, SERVER)
-        player = await Server.async_get_player(name="Bedroom")
+        player = await lms.async_get_player(name="Bedroom")
 	await player.async_update()
 	print(player.album)
 	await player.async_play()
