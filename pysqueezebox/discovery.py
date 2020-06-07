@@ -1,6 +1,7 @@
 """The pysqueezebox server discovery module."""
 import asyncio
 import logging
+import socket
 
 from .server import Server
 
@@ -8,7 +9,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DISCOVERY_INTERVAL = 60  # default value from Logitech Media Server code
 DISCOVERY_MESSAGE = b"eIPAD\x00NAME\x00JSON\x00UUID\x00VERS"
-BROADCAST_ADDR = ("255.255.255.255", "3483")
+BROADCAST_ADDR = ("255.255.255.255", 3483)
 
 
 def _unpack_discovery_response(data, addr):
@@ -81,16 +82,19 @@ async def async_discover(callback, session=None):
     """
     loop = asyncio.get_running_loop()
 
+    # for python3.7 compatability, we must create our own socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
     transport, _ = await loop.create_datagram_endpoint(
         lambda: ServerDiscoveryProtocol(callback, session),
-        remote_addr=BROADCAST_ADDR,
-        allow_broadcast=True,
+        sock=sock,
     )
 
     try:
         while True:
             _LOGGER.debug("Sending discovery message.")
-            transport.sendto(DISCOVERY_MESSAGE)
+            transport.sendto(DISCOVERY_MESSAGE, BROADCAST_ADDR)
             await asyncio.sleep(DISCOVERY_INTERVAL)
 
     except asyncio.CancelledError:
