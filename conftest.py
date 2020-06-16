@@ -6,7 +6,7 @@ import pytest
 from pysqueezebox import Player, Server
 
 SERVER = "192.168.2.2"
-PLAYER = "Tape"
+PLAYER = "Living Room"
 
 
 @pytest.fixture(scope="module")

@@ -148,13 +148,13 @@ class Player:
     def current_track(self):
         """Return playlist_loop or remoteMeta dictionary for current track."""
         try:
+            return self._status["remoteMeta"]
+        except KeyError:
+            pass
+        try:
             cur_index = int(self._status["playlist_cur_index"])
             return self._status["playlist_loop"][cur_index]
         except (KeyError, IndexError):
-            pass
-        try:
-            return self._status["remoteMeta"]
-        except KeyError:
             pass
         return None
 
