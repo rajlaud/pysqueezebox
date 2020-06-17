@@ -154,9 +154,10 @@ class Server:
         try:
             with async_timeout.timeout(TIMEOUT):
                 response = await self.session.post(url, data=data, auth=auth)
+                self.http_status = response.status
 
                 if response.status != 200:
-                    _LOGGER.error(
+                    _LOGGER.info(
                         "Query failed, response code: %s Full message: %s",
                         response.status,
                         response,
