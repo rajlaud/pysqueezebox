@@ -118,7 +118,7 @@ class Player:
     def image_url(self):
         """Return image url of current playing media."""
         if self.current_track and "artwork_url" in self.current_track:
-            # we're playing a remote stream with an artworkd url
+            # we're playing a remote stream with an artwork url
             image_url = self.current_track["artwork_url"]
         elif self.current_track and "coverid" in self.current_track:
             image_url = f"/music/{self.current_track['coverid']}/cover.jpg"
