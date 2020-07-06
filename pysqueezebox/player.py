@@ -99,8 +99,8 @@ class Player:
     @property
     def duration(self):
         """Return duration of current playing media in seconds."""
-        if "duration" in self._status:
-            return int(float(self._status["duration"]))
+        if self.current_track and "duration" in self.current_track:
+            return int(float(self.current_track["duration"]))
         return None
 
     @property
@@ -125,7 +125,7 @@ class Player:
         else:
             # querying a coverid without art will result in the default image
             # we use 'unknown' so that this image can be cached
-            image_url = f"/music/unknown/cover.jpg"
+            image_url = "/music/unknown/cover.jpg"
 
         # pylint: disable=protected-access
         if self._lms._username:

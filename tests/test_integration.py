@@ -19,6 +19,7 @@ from conftest import compare_playlists
 pytestmark = pytest.mark.asyncio
 
 IP = None
+REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
 
 @pytest.fixture(name="lms", scope="module")
@@ -38,29 +39,70 @@ async def fixture_lms(request):
         yield server
 
 
-@pytest.fixture(name="player", scope="module")
-async def fixture_player(lms):
-    """Return a working Player object."""
+@pytest.fixture(name="players", scope="module")
+async def fixture_players(lms):
+    """Return list of players."""
     players = await lms.async_get_players()
+    return players
+
+
+async def save_player_state(test_player):
+    """Save the state of a player to restore after testing."""
+    state = {}
+    await test_player.async_update()
+    state["power"] = test_player.power
+    state["mode"] = test_player.mode
+    state["time"] = test_player.time
+    state["playlist"] = test_player.playlist.copy() if test_player.playlist else None
+    state["sync_group"] = test_player.sync_group
+    return state
+
+
+async def restore_player_state(test_player, state):
+    """Restore the state of a player after testing."""
+    await test_player.async_pause()
+    await test_player.async_clear_playlist()
+    if state["playlist"]:
+        await test_player.async_load_playlist(state["playlist"], "add")
+    await test_player.async_set_power(state["power"])
+    await test_player.async_time(state["time"])
+    await test_player.async_unsync()
+    for other_player in state["sync_group"]:
+        await test_player.async_sync(other_player)
+    if state["mode"] == "play":
+        await test_player.async_play()
+
+
+@pytest.fixture(name="player", scope="module")
+async def fixture_player(players):
+    """Return a working Player object."""
     if len(players) < 1:
         pytest.fail("No players found. You can use a virtual player like squeezelite.")
     test_player = players[0]
     assert isinstance(test_player, Player)
-    assert await test_player.async_update()
+    state = await save_player_state(test_player)
 
-    power = test_player.power
-    mode = test_player.mode
-    playlist = test_player.playlist.copy()
+    assert state["playlist"]  # we can't test play, pause, etc. on an empty playlist
 
     yield test_player
 
-    await test_player.async_pause()
-    await test_player.async_clear_playlist()
-    if playlist:
-        await test_player.async_load_playlist(playlist, "add")
-    await test_player.async_set_power(power)
-    if mode == "play":
-        await test_player.async_play()
+    await restore_player_state(test_player, state)
+
+
+@pytest.fixture(name="other_player", scope="module")
+async def fixture_other_player(players):
+    """Return a second working Player object."""
+    if len(players) < 2:
+        pytest.fail(
+            "No second player found. You can use a virtual player like squeezelite."
+        )
+    test_player = players[1]
+    assert isinstance(test_player, Player)
+    state = await save_player_state(test_player)
+
+    yield test_player
+
+    await restore_player_state(test_player, state)
 
 
 @pytest.fixture(name="broken_player", scope="module")
@@ -86,10 +128,8 @@ async def fixture_test_album(player):
     album art test."""
     test_albums = (await player.async_query("albums", "0", "10"))["albums_loop"]
     for album in test_albums:
-        tracks = (
-            await player.async_query(
-                "tracks", "0", "2", f"album_id:{album['id']}", "tags:ju"
-            )
+        tracks = await player.async_query(
+            "tracks", "0", "2", f"album_id:{album['id']}", "tags:ju"
         )
         if tracks["count"] > 1 and "coverart" in tracks["titles_loop"][0]:
             return [track["url"] for track in tracks["titles_loop"]]
@@ -152,16 +192,22 @@ async def test_get_player(lms, player):
     assert player.player_id == test_player_c.player_id
 
 
-async def test_player_properties(player, broken_player):
-    """Tests each player property."""
+def print_properties(player):
+    """Print all properties of player."""
     for p in dir(Player):
         prop = getattr(Player, p)
         if isinstance(prop, property):
             print(f"{p}: {prop.fget(player)}")
-    for p in dir(Player):
-        prop = getattr(Player, p)
-        if isinstance(prop, property):
-            print(f"{p}: {prop.fget(broken_player)}")
+
+
+async def test_player_properties(player, broken_player):
+    """Tests each player property."""
+    await player.async_update()
+    print_properties(player)
+    await player.async_load_url(REMOTE_STREAM)
+    await player.async_update()
+    print_properties(player)
+    print_properties(broken_player)
     assert broken_player.power is None
 
 
@@ -328,6 +374,8 @@ async def test_player_playlist(player, broken_player, test_uris):
     current_playlist = test_playlist[1:] + test_playlist + test_playlist[:1]
     assert compare_playlists(current_playlist, player.playlist)
 
+    assert not await player.async_load_playlist(None)
+
 
 async def test_player_coverart(player, broken_player, test_album):
     """Test album cover art."""
@@ -373,42 +421,26 @@ async def test_player_repeat(player, broken_player):
     await player.async_set_repeat(repeat_mode)
 
 
-async def test_player_sync(lms, broken_player):
-    players = await lms.async_get_players()
-    muting = {}
-    sync_master = {}
+async def test_player_sync(player, other_player, broken_player):
+    """Test sync functions."""
 
-    test_master = players[0]
-    for player in players:
-        # mute all players
-        await player.async_update()
-        muting[player.player_id] = player.muting
-        await player.async_set_muting(True)
-        sync_master[player.player_id] = player.sync_master
-        if player.synced:
-            assert await player.async_unsync()
-            await player.async_update()
-            assert not player.synced
-        assert await player.async_sync(test_master)
-        await player.async_update()
-        assert (
-            test_master.player_id in player.sync_group
-            or test_master.player_id in player.player_id
-        )
-        assert await player.async_unsync()
-        await player.async_update()
-        assert not player.synced
-        assert await player.async_sync(test_master.player_id)
-        await player.async_update()
-        assert (
-            test_master.player_id in player.sync_group
-            or test_master.player_id in player.player_id
-        )
+    async def unsync_test(test_player):
+        await test_player.async_unsync()
+        await test_player.async_update()
+        assert not test_player.synced
+        assert not test_player.sync_group
+        assert not test_player.sync_master
+        assert not test_player.sync_slaves
 
-    for player in players:
-        await player.async_unsync()
+    await player.async_pause()
+    await other_player.async_pause()
+    await unsync_test(player)
+    await unsync_test(other_player)
 
-    for player in players:
-        if player in sync_master:
-            player.async_sync(sync_master[player.player_id])
-        await player.async_set_muting(muting[player.player_id])
+    await player.async_sync(other_player)
+    await player.async_update()
+    await other_player.async_update()
+    assert other_player.player_id in player.sync_group
+    assert player.player_id in other_player.sync_group
+
+    assert not await broken_player.async_sync(player)
