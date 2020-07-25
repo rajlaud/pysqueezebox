@@ -137,6 +137,17 @@ async def fixture_test_album(player):
     pytest.fail("Couldn't find album with cover art and 2+ tracks")
 
 
+async def wait_for_mode(player, mode):
+    """Wait until player is in desired mode.
+
+    Needed to test play, pause, etc. because the player does not respond immediately."""
+    await player.async_update()
+    while player.mode != mode:
+        await asyncio.sleep(1)
+        await player.async_update()
+    return True
+
+
 async def test_discovery_integration():
     """Test discovery - requires actual discoverable server."""
     event = asyncio.Event()
@@ -281,31 +292,21 @@ async def test_player_play_pause(player, broken_player):
 
     assert await player.async_play()
     assert not await broken_player.async_play()
-    await asyncio.sleep(2)
-    await player.async_update()
-    assert player.mode == "play"
+    await asyncio.wait_for(wait_for_mode(player, "play"), 5)
 
     assert await player.async_play()
-    await asyncio.sleep(2)
-    await player.async_update()
-    assert player.mode == "play"
+    await asyncio.wait_for(wait_for_mode(player, "play"), 5)
 
     assert await player.async_pause()
     assert not await broken_player.async_pause()
-    await asyncio.sleep(2)
-    await player.async_update()
-    assert player.mode == "pause"
+    await asyncio.wait_for(wait_for_mode(player, "pause"), 5)
 
     assert await player.async_pause()
-    await asyncio.sleep(2)
-    await player.async_update()
-    assert player.mode == "pause"
+    await asyncio.wait_for(wait_for_mode(player, "pause"), 5)
 
     assert await player.async_toggle_pause()
     assert not await broken_player.async_toggle_pause()
-    await asyncio.sleep(2)
-    await player.async_update()
-    assert player.mode == "play"
+    await asyncio.wait_for(wait_for_mode(player, "play"), 5)
 
 
 async def test_player_load_url_and_index(player, broken_player, test_uris):
@@ -316,6 +317,7 @@ async def test_player_load_url_and_index(player, broken_player, test_uris):
     assert player.playlist is None
 
     assert await player.async_load_url(test_uris[0], "play")
+
     await player.async_update()
     assert len(player.playlist) == 1
     assert player.current_track["url"] == test_uris[0]

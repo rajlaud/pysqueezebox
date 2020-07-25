@@ -3,10 +3,10 @@ import asyncio
 import pytest
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def event_loop():
     """
-    Re-scope the event loop to cover this module. Allows to use one aiohttp session
+    Re-scope the event loop to cover this session. Allows to use one aiohttp session
     for all of the tests.
     """
     loop = asyncio.get_event_loop()

@@ -145,6 +145,13 @@ class Player:
         return url
 
     @property
+    def current_index(self):
+        """Return the current index in the playlist."""
+        if "playlist_cur_index" in self._status:
+            return int(self._status["playlist_cur_index"])
+        return None
+
+    @property
     def current_track(self):
         """Return playlist_loop or remoteMeta dictionary for current track."""
         try:
@@ -152,8 +159,7 @@ class Player:
         except KeyError:
             pass
         try:
-            cur_index = int(self._status["playlist_cur_index"])
-            return self._status["playlist_loop"][cur_index]
+            return self._status["playlist_loop"][self.current_index]
         except (KeyError, IndexError):
             pass
         return None
