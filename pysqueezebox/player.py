@@ -302,16 +302,24 @@ class Player:
         """
 
         async def _verified_pause():
-            await self.async_query("pause", "1")
-            return self.async_query("mode", "?")
+            pause = await self.async_query("pause", "1")
+            if pause:
+                result = await self.async_query("mode", "?")
+                if result:
+                    return result.get("_mode")
+            return pause
 
         current_mode = await _verified_pause()
-        async with timeout(5) as cm:
-            while current_mode.get("_mode") == "play":
-                await _verified_pause()
+        if not current_mode:
+            # if sending pause command failed, stop here
+            return current_mode
+
+        async with timeout(5) as manager:
+            while current_mode == "play":
+                current_mode = await _verified_pause()
                 await asyncio.sleep(1)
 
-        return not cm.expired
+        return not manager.expired
 
     async def async_index(self, index):
         """

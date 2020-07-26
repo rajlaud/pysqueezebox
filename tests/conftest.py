@@ -1,5 +1,6 @@
 """Common functions and fixtures for pysqueezebox tests."""
 import asyncio
+
 import pytest
 
 
@@ -17,21 +18,30 @@ def event_loop():
 def pytest_addoption(parser):
     """Add the --ip and --port commandline options"""
     parser.addoption(
-        '--ip',
+        "--ip",
         type=str,
         default=None,
-        action='store',
-        dest='IP',
-        help='the IP address for the squeezebox server to be used for the integration tests'
+        action="store",
+        dest="IP",
+        help="the IP address for the squeezebox server to be used for the integration tests",
     )
 
     parser.addoption(
-        '--port',
+        "--port",
         type=int,
         default=9000,
-        action='store',
-        dest='PORT',
-        help='the port for the squeezebox server to be used for the integration tests'
+        action="store",
+        dest="PORT",
+        help="the port for the squeezebox server to be used for the integration tests",
+    )
+
+    parser.addoption(
+        "--exclude-player",
+        type=str,
+        default=None,
+        action="store",
+        dest="EXCLUDE",
+        help="exclude this player from being used in tests",
     )
 
 
