@@ -293,33 +293,40 @@ class Player:
         """Send play command to player."""
         return await self.async_query("play")
 
+    async def async_stop(self):
+        """Send stop command to player."""
+        return await self._async_pause_stop(["stop"])
+
     async def async_pause(self):
+        """Send pause command to player."""
+        return await self._async_pause_stop(["pause", "1"])
+
+    async def _async_pause_stop(self, cmd):
         """
-        Send pause command to player.
+        Retry pause or stop command until successful or timed out.
 
-        A pause command can be silent ignored by LMS if sent too soon after a play.
-        Retry for up to 5 seconds before giving up.
+        Necessary because a pause or stop command sent immediately after a play command will be
+        silently ignored by LMS.
         """
 
-        async def _verified_pause():
-            pause = await self.async_query("pause", "1")
-            if pause:
-                result = await self.async_query("mode", "?")
-                if result:
-                    return result.get("_mode")
-            return pause
+        async def _verified_pause_stop(cmd):
+            success = await self.async_query(*cmd)
+            if success:
+                return await self.async_update()
+            _LOGGER.error("Failed to send command %s", cmd)
+            return False
 
-        current_mode = await _verified_pause()
-        if not current_mode:
-            # if sending pause command failed, stop here
-            return current_mode
+        if not await _verified_pause_stop(cmd):
+            return False
 
-        async with timeout(5) as manager:
-            while current_mode == "play":
-                current_mode = await _verified_pause()
-                await asyncio.sleep(1)
-
-        return not manager.expired
+        try:
+            async with timeout(5):
+                while self.mode == "play":
+                    await _verified_pause_stop(cmd)
+                    await asyncio.sleep(1)
+        except TimeoutError:
+            return False
+        return True
 
     async def async_index(self, index):
         """

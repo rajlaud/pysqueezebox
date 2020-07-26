@@ -137,17 +137,6 @@ async def fixture_test_album(player):
     pytest.fail("Couldn't find album with cover art and 2+ tracks")
 
 
-async def wait_for_mode(player, mode):
-    """Wait until player is in desired mode.
-
-    Needed to test play, pause, etc. because the player does not respond immediately."""
-    await player.async_update()
-    while player.mode != mode:
-        await asyncio.sleep(1)
-        await player.async_update()
-    return True
-
-
 async def test_discovery_integration():
     """Test discovery - requires actual discoverable server."""
     event = asyncio.Event()
@@ -286,27 +275,37 @@ async def test_player_volume(player, broken_player):
     assert not await broken_player.async_set_volume(new_vol)
 
 
-async def test_player_play_pause(player, broken_player):
+async def test_player_play_pause_stop(player, broken_player):
     """Test play and pause controls."""
     assert await player.async_set_muting(True)
 
     assert await player.async_play()
     assert not await broken_player.async_play()
-    await asyncio.wait_for(wait_for_mode(player, "play"), 5)
+    await player.async_update()
+    assert player.mode == "play"
 
     assert await player.async_play()
-    await asyncio.wait_for(wait_for_mode(player, "play"), 5)
+    await player.async_update()
+    assert player.mode == "play"
 
     assert await player.async_pause()
     assert not await broken_player.async_pause()
-    await asyncio.wait_for(wait_for_mode(player, "pause"), 5)
+    await player.async_update()
+    assert player.mode in ["pause", "stop"]
 
     assert await player.async_pause()
-    await asyncio.wait_for(wait_for_mode(player, "pause"), 5)
+    await player.async_update()
+    assert player.mode in ["pause", "stop"]
 
     assert await player.async_toggle_pause()
     assert not await broken_player.async_toggle_pause()
-    await asyncio.wait_for(wait_for_mode(player, "play"), 5)
+    await player.async_update()
+    assert player.mode == "play"
+
+    assert await player.async_stop()
+    assert not await broken_player.async_stop()
+    await player.async_update()
+    assert player.mode == "stop"
 
 
 async def test_player_load_url_and_index(player, broken_player, test_uris):
