@@ -1,6 +1,9 @@
 """The pysqueezebox.Player() class."""
+import asyncio
 import logging
 import urllib
+
+from async_timeout import timeout
 
 from .const import REPEAT_MODE, SHUFFLE_MODE
 
@@ -291,8 +294,24 @@ class Player:
         return await self.async_query("play")
 
     async def async_pause(self):
-        """Send pause command to player."""
-        return await self.async_query("pause", "1")
+        """
+        Send pause command to player.
+
+        A pause command can be silent ignored by LMS if sent too soon after a play.
+        Retry for up to 5 seconds before giving up.
+        """
+
+        async def _verified_pause():
+            await self.async_query("pause", "1")
+            return self.async_query("mode", "?")
+
+        current_mode = await _verified_pause()
+        async with timeout(5) as cm:
+            while current_mode.get("_mode") == "play":
+                await _verified_pause()
+                await asyncio.sleep(1)
+
+        return not cm.expired
 
     async def async_index(self, index):
         """
