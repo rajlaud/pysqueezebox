@@ -40,10 +40,16 @@ async def fixture_lms(request):
 
 
 @pytest.fixture(name="players", scope="module")
-async def fixture_players(lms):
+async def fixture_players(lms, request):
     """Return list of players."""
     players = await lms.async_get_players()
-    return players
+    exclude = request.config.option.EXCLUDE if request.config.option.EXCLUDE else []
+    include_players = [
+        player
+        for player in players
+        if player.name not in exclude and player.player_id not in exclude
+    ]
+    return include_players
 
 
 async def save_player_state(test_player):
@@ -65,6 +71,7 @@ async def restore_player_state(test_player, state):
     if state["playlist"]:
         await test_player.async_load_playlist(state["playlist"], "add")
     await test_player.async_set_power(state["power"])
+    await asyncio.sleep(1)
     await test_player.async_time(state["time"])
     await test_player.async_unsync()
     for other_player in state["sync_group"]:
@@ -200,12 +207,21 @@ def print_properties(player):
             print(f"{p}: {prop.fget(player)}")
 
 
+async def test_add_tags(player, broken_player):
+    """Tests adding a tag to async_update."""
+    assert await player.async_update(add_tags="D")
+    print(player.current_track)
+    assert player.current_track.get("addedTime")
+    assert not await broken_player.async_update(add_tags="D")
+
+
 async def test_player_properties(player, broken_player):
     """Tests each player property."""
     await player.async_update()
     print_properties(player)
     await player.async_load_url(REMOTE_STREAM)
     await player.async_update()
+    assert player.remote
     print_properties(player)
     print_properties(broken_player)
     assert broken_player.power is None
@@ -445,3 +461,5 @@ async def test_player_sync(player, other_player, broken_player):
     assert player.player_id in other_player.sync_group
 
     assert not await broken_player.async_sync(player)
+    with pytest.raises(RuntimeError):
+        assert await player.async_sync(None)
