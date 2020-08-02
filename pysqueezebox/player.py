@@ -28,6 +28,7 @@ class Player:
         self._id = player_id
         self._status = status if status else {}
         self._playlist_timestamp = 0
+        self._playlist_tags = None
         self._name = name
 
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
@@ -106,7 +107,7 @@ class Player:
 
     @property
     def duration_float(self):
-        """Return duration of current playing media in seconds."""
+        """Return duration of current playing media in floating point seconds."""
         if self.current_track and "duration" in self.current_track:
             return float(self.current_track["duration"])
         return None
@@ -123,7 +124,7 @@ class Player:
     @property
     def time_float(self):
         """
-        Return position of current playing media in seconds.
+        Return position of current playing media in floating point seconds.
 
         The LMS API calls this "time" so we follow that convention.
         """
@@ -321,9 +322,13 @@ class Player:
             return False
 
         if "playlist_timestamp" in response and "playlist_tracks" in response:
-            if response["playlist_timestamp"] > self._playlist_timestamp:
+            if response["playlist_timestamp"] > self._playlist_timestamp or set(
+                tags
+            ).issuperset(self._playlist_tags):
                 self._playlist_timestamp = response["playlist_timestamp"]
-                # poll server again for full playlist, which has changed
+                self._playlist_tags = set(tags)
+                # poll server again for full playlist, which has either changed
+                # or about which we are seeking new tags
                 response = await self.async_query(
                     "status", "0", response["playlist_tracks"], f"tags:{tags}"
                 )
