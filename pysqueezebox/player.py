@@ -322,9 +322,10 @@ class Player:
             return False
 
         if "playlist_timestamp" in response and "playlist_tracks" in response:
-            if response["playlist_timestamp"] > self._playlist_timestamp or set(
-                tags
-            ).issuperset(self._playlist_tags):
+            if (
+                response["playlist_timestamp"] > self._playlist_timestamp
+                or set(tags) > self._playlist_tags
+            ):
                 self._playlist_timestamp = response["playlist_timestamp"]
                 self._playlist_tags = set(tags)
                 # poll server again for full playlist, which has either changed
