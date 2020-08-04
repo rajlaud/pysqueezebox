@@ -184,5 +184,5 @@ class Server:
                 # a successful command will return an empty result
                 return True
             return result
-        except AttributeError:
+        except KeyError:
             _LOGGER.error("Received invalid response: %s", data)

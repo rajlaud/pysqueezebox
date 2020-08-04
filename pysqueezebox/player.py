@@ -85,7 +85,7 @@ class Player:
         We return the absolute value, separating out volume from muting.
         """
         if "mixer volume" in self._status:
-            return abs(int(float(self._status["mixer volume"])))
+            return abs(int(self._status["mixer volume"]))
         return None
 
     @property

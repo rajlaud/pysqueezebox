@@ -36,10 +36,19 @@ def pytest_addoption(parser):
     )
 
     parser.addoption(
+        "--prefer-player",
+        type=str,
+        default=None,
+        action="append",
+        dest="PREFER",
+        help="prefer this player in tests",
+    )
+
+    parser.addoption(
         "--exclude-player",
         type=str,
         default=None,
-        action="store",
+        action="append",
         dest="EXCLUDE",
         help="exclude this player from being used in tests",
     )

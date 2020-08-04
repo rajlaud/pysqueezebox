@@ -43,12 +43,29 @@ async def fixture_lms(request):
 async def fixture_players(lms, request):
     """Return list of players."""
     players = await lms.async_get_players()
+    prefer = request.config.option.PREFER
     exclude = request.config.option.EXCLUDE if request.config.option.EXCLUDE else []
-    include_players = [
-        player
-        for player in players
-        if player.name not in exclude and player.player_id not in exclude
-    ]
+
+    include_players = []
+    if prefer:
+        print(f"Preferring {prefer}")
+        include_players.extend(
+            [
+                player
+                for player in players
+                if player.name in prefer or player.player_id in prefer
+            ]
+        )
+        exclude.extend([player.name for player in include_players])
+
+    print(f"Excluding {exclude}")
+    include_players.extend(
+        [
+            player
+            for player in players
+            if player.name not in exclude and player.player_id not in exclude
+        ]
+    )
     return include_players
 
 
@@ -91,6 +108,8 @@ async def fixture_player(players):
 
     assert state["playlist"]  # we can't test play, pause, etc. on an empty playlist
 
+    print(f"Using {test_player.name} for tests")
+    await test_player.async_unsync()
     yield test_player
 
     await restore_player_state(test_player, state)
@@ -259,13 +278,18 @@ async def test_player_muting(player, broken_player):
     """Test Player muting controls."""
     assert await player.async_update()
     muting = player.muting
+    if player.volume == 0:
+        assert await player.async_set_volume("+1")
     assert await player.async_set_muting(True)
+    await asyncio.sleep(.5)
     await player.async_update()
     assert player.muting
     assert await player.async_set_muting(True)
+    await asyncio.sleep(.5)
     await player.async_update()
     assert player.muting
     assert await player.async_set_muting(False)
+    await asyncio.sleep(.5)
     await player.async_update()
     assert not player.muting
     await player.async_set_muting(muting)
