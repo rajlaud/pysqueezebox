@@ -28,6 +28,7 @@ class Player:
         self._id = player_id
         self._status = status if status else {}
         self._playlist_timestamp = 0
+        self._playlist_tags = None
         self._name = name
 
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
@@ -102,8 +103,13 @@ class Player:
     @property
     def duration(self):
         """Return duration of current playing media in seconds."""
+        return int(self.duration_float) if self.duration_float else None
+
+    @property
+    def duration_float(self):
+        """Return duration of current playing media in floating point seconds."""
         if self.current_track and "duration" in self.current_track:
-            return int(float(self.current_track["duration"]))
+            return float(self.current_track["duration"])
         return None
 
     @property
@@ -113,8 +119,17 @@ class Player:
 
         The LMS API calls this "time" so we follow that convention.
         """
+        return int(self.time_float) if self.time_float else None
+
+    @property
+    def time_float(self):
+        """
+        Return position of current playing media in floating point seconds.
+
+        The LMS API calls this "time" so we follow that convention.
+        """
         if "time" in self._status:
-            return int(float(self._status["time"]))
+            return float(self._status["time"])
         return None
 
     @property
@@ -168,6 +183,20 @@ class Player:
         return None
 
     @property
+    def remote(self):
+        """Return true if current media is a remote stream."""
+        if "remote" in self._status:
+            return self._status["remote"] == 1
+        return None
+
+    @property
+    def remote_title(self):
+        """Return title of current playing media on remote stream."""
+        if self.current_track and "remote_title" in self.current_track:
+            return self.current_track.get("remote_title")
+        return None
+
+    @property
     def title(self):
         """Return title of current playing media."""
         if self.current_track:
@@ -186,6 +215,34 @@ class Player:
         """Return album of current playing media."""
         if self.current_track:
             return self.current_track.get("album")
+        return None
+
+    @property
+    def content_type(self):
+        """Return content type of current playing media."""
+        if self.current_track:
+            return self.current_track.get("type")
+        return None
+
+    @property
+    def bitrate(self):
+        """Return bit rate of current playing media."""
+        if self.current_track:
+            return self.current_track.get("bitrate")
+        return None
+
+    @property
+    def samplerate(self):
+        """Return sample rate of current playing media."""
+        if self.current_track:
+            return self.current_track.get("samplerate")
+        return None
+
+    @property
+    def samplesize(self):
+        """Return sample size of current playing media."""
+        if self.current_track:
+            return self.current_track.get("samplesize")
         return None
 
     @property
@@ -213,6 +270,11 @@ class Player:
     def playlist(self):
         """Return the current playlist."""
         return self._status.get("playlist_loop")
+
+    @property
+    def playlist_tracks(self):
+        """Return the current playlist length."""
+        return self._status.get("playlist_tracks")
 
     @property
     def synced(self):
@@ -245,22 +307,29 @@ class Player:
         """Return result of a query specific to this player."""
         return await self._lms.async_query(*parameters, player=self._id)
 
-    async def async_update(self):
+    async def async_update(self, add_tags=None):
         """
         Update the current state of the player.
 
         Return True if successful, False if update fails.
         """
-        tags = "adcKlu"
+        tags = "acdIKlNorTux"
+        if add_tags:
+            tags = "".join(set(tags + add_tags))
         response = await self.async_query("status", "-", "1", f"tags:{tags}")
 
         if response is False:
             return False
 
         if "playlist_timestamp" in response and "playlist_tracks" in response:
-            if response["playlist_timestamp"] > self._playlist_timestamp:
+            if (
+                response["playlist_timestamp"] > self._playlist_timestamp
+                or set(tags) > self._playlist_tags
+            ):
                 self._playlist_timestamp = response["playlist_timestamp"]
-                # poll server again for full playlist, which has changed
+                self._playlist_tags = set(tags)
+                # poll server again for full playlist, which has either changed
+                # or about which we are seeking new tags
                 response = await self.async_query(
                     "status", "0", response["playlist_tracks"], f"tags:{tags}"
                 )
