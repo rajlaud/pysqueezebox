@@ -3,11 +3,17 @@ import asyncio
 import logging
 import urllib
 
-from async_timeout import timeout
+import async_timeout
 
 from .const import REPEAT_MODE, SHUFFLE_MODE
 
 _LOGGER = logging.getLogger(__name__)
+
+# default timeout waiting for server to communicate with player
+TIMEOUT = 5
+
+# how quickly to poll server waiting for command to reach player
+POLL_INTERVAL = 0.5
 
 
 # pylint: disable=too-many-public-methods
@@ -272,6 +278,13 @@ class Player:
         return self._status.get("playlist_loop")
 
     @property
+    def playlist_urls(self):
+        """Return only the urls of the current playlist. Useful for comparing playlists."""
+        if not self.playlist:
+            return None
+        return [{"url": item["url"]} for item in self.playlist]
+
+    @property
     def playlist_tracks(self):
         """Return the current playlist length."""
         return self._status.get("playlist_tracks")
@@ -302,6 +315,21 @@ class Player:
         if self.sync_master:
             sync_group.append(self.sync_master)
         return sync_group
+
+    async def _wait_for_property(self, prop, value, timeout):
+        """Wait for property to hit certain state or timeout."""
+        if timeout == 0:
+            return True
+        await self.async_update()
+        try:
+            with async_timeout.timeout(timeout):
+                while getattr(self, prop) != value:
+                    await asyncio.sleep(POLL_INTERVAL)
+                    await self.async_update()
+                return True
+        except asyncio.TimeoutError:
+            _LOGGER.error("Timed out waiting for %s to have value %s", prop, value)
+            return False
 
     async def async_query(self, *parameters):
         """Return result of a query specific to this player."""
@@ -345,32 +373,50 @@ class Player:
 
         return True
 
-    async def async_set_volume(self, volume):
+    async def async_set_volume(self, volume, timeout=TIMEOUT):
         """Set volume level, range 0..100, or +/- integer."""
-        return await self.async_query("mixer", "volume", volume)
+        if isinstance(volume, str) and (
+            volume.startswith("+") or volume.startswith("-")
+        ):
+            await self.async_update()
+            target_volume = self.volume + int(volume)
+        else:
+            target_volume = int(volume)
+        if not await self.async_query("mixer", "volume", volume):
+            return False
+        return await self._wait_for_property("volume", target_volume, timeout)
 
-    async def async_set_muting(self, mute):
+    async def async_set_muting(self, mute, timeout=TIMEOUT):
         """Mute (true) or unmute (false) squeezebox."""
         mute_numeric = "1" if mute else "0"
-        return await self.async_query("mixer", "muting", mute_numeric)
+        if not await self.async_query("mixer", "muting", mute_numeric):
+            return False
+        return await self._wait_for_property("muting", mute, timeout)
 
-    async def async_toggle_pause(self):
+    async def async_toggle_pause(self, timeout=TIMEOUT):
         """Send command to player to toggle play/pause."""
-        return await self.async_query("pause")
+        await self.async_update()
+        target_mode = "pause" if self.mode == "play" else "play"
 
-    async def async_play(self):
+        if not await self.async_query("pause"):
+            return False
+        return await self._wait_for_property("mode", target_mode, timeout)
+
+    async def async_play(self, timeout=TIMEOUT):
         """Send play command to player."""
-        return await self.async_query("play")
+        if not await self.async_query("play"):
+            return False
+        return await self._wait_for_property("mode", "play", timeout)
 
-    async def async_stop(self):
+    async def async_stop(self, timeout=TIMEOUT):
         """Send stop command to player."""
-        return await self._async_pause_stop(["stop"])
+        return await self._async_pause_stop(["stop"], timeout)
 
-    async def async_pause(self):
+    async def async_pause(self, timeout=TIMEOUT):
         """Send pause command to player."""
-        return await self._async_pause_stop(["pause", "1"])
+        return await self._async_pause_stop(["pause", "1"], timeout)
 
-    async def _async_pause_stop(self, cmd):
+    async def _async_pause_stop(self, cmd, timeout=TIMEOUT):
         """
         Retry pause or stop command until successful or timed out.
 
@@ -389,34 +435,62 @@ class Player:
             return False
 
         try:
-            async with timeout(5):
+            async with async_timeout.timeout(timeout):
                 while self.mode == "play":
                     await _verified_pause_stop(cmd)
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(POLL_INTERVAL)
+                return True
         except TimeoutError:
             return False
-        return True
 
-    async def async_index(self, index):
+    async def async_index(self, index, timeout=TIMEOUT):
         """
         Change position in playlist.
 
         index: if an integer, change to this position. if preceded by a + or -,
                move forward or backward this many tracks. (required)
         """
-        return await self.async_query("playlist", "index", index)
+        if isinstance(index, str) and (
+            index.startswith("+") or index.startswith("-")
+        ):
+            await self.async_update()
+            target_index = self.current_index + int(index)
+        else:
+            target_index = int(index)
 
-    async def async_time(self, position):
-        """Seek to a particular time in track."""
-        return await self.async_query("time", position)
+        if not await self.async_query("playlist", "index", index):
+            return False
+        return await self._wait_for_property("current_index", target_index, timeout)
 
-    async def async_set_power(self, power):
+    async def async_time(self, position, timeout=TIMEOUT):
+        """
+        Seek to a particular time in track.
+        """
+        if not position:
+            return False
+
+        if not await self.async_query("time", position):
+            return False
+
+        await self.async_update()
+        try:
+            with async_timeout.timeout(timeout):
+                # We have to use a fuzzy match to see if the player got the command.
+                while not position <= self.time <= position + TIMEOUT:
+                    await asyncio.sleep(POLL_INTERVAL)
+                    await self.async_update()
+                return True
+        except asyncio.TimeoutError:
+            return False
+
+    async def async_set_power(self, power, timeout=TIMEOUT):
         """Turn on or off squeezebox."""
-        if power:
-            return await self.async_query("power", "1")
-        return await self.async_query("power", "0")
+        power_numeric = "1" if power else "0"
+        if not await self.async_query("power", power_numeric):
+            return False
+        return await self._wait_for_property("power", power, timeout)
 
-    async def async_load_url(self, url, cmd="load"):
+    async def async_load_url(self, url, cmd="load", timeout=TIMEOUT):
         """
         Play a specific track by url.
 
@@ -424,7 +498,19 @@ class Player:
         cmd: "insert" - adds next in playlist
         cmd: "add" - adds to end of playlist
         """
-        return await self.async_query("playlist", cmd, url)
+        if cmd in ["insert", "add"] and self.playlist:
+            await self.async_update()
+            target_playlist = self.playlist_urls
+            if cmd == "add":
+                target_playlist.append({"url": url})
+            else:
+                target_playlist.insert(self.current_index + 1, {"url": url})
+        else:
+            target_playlist = [{"url": url}]
+
+        if not await self.async_query("playlist", cmd, url):
+            return False
+        return await self._wait_for_property("playlist_urls", target_playlist, timeout)
 
     async def async_load_playlist(self, playlist_ref, cmd="load"):
         """
@@ -457,23 +543,29 @@ class Player:
                 success = False
         return success
 
-    async def async_set_shuffle(self, shuffle):
+    async def async_set_shuffle(self, shuffle, timeout=TIMEOUT):
         """Enable/disable shuffle mode."""
         if shuffle in SHUFFLE_MODE:
             shuffle_int = SHUFFLE_MODE.index(shuffle)
-            return await self.async_query("playlist", "shuffle", shuffle_int)
+            if not await self.async_query("playlist", "shuffle", shuffle_int):
+                return False
+            return await self._wait_for_property("shuffle", shuffle, timeout)
 
-    async def async_set_repeat(self, repeat):
+    async def async_set_repeat(self, repeat, timeout=TIMEOUT):
         """Enable/disable repeat."""
         if repeat in REPEAT_MODE:
             repeat_int = REPEAT_MODE.index(repeat)
-            return await self.async_query("playlist", "repeat", repeat_int)
+            if not await self.async_query("playlist", "repeat", repeat_int):
+                return False
+            return await self._wait_for_property("repeat", repeat, timeout)
 
-    async def async_clear_playlist(self):
+    async def async_clear_playlist(self, timeout=TIMEOUT):
         """Send the media player the command for clear playlist."""
-        return await self.async_query("playlist", "clear")
+        if not await self.async_query("playlist", "clear"):
+            return False
+        return await self._wait_for_property("playlist", None, timeout)
 
-    async def async_sync(self, other_player):
+    async def async_sync(self, other_player, timeout=TIMEOUT):
         """
         Add another Squeezebox player to this player's sync group.
 
@@ -492,8 +584,21 @@ class Player:
                 "async_sync called without other_player or other_player_id"
             )
 
-        return await self.async_query("sync", other_player_id)
+        if not await self.async_query("sync", other_player_id):
+            return False
 
-    async def async_unsync(self):
+        await self.async_update()
+        try:
+            with async_timeout.timeout(timeout):
+                while other_player_id not in self.sync_group:
+                    await asyncio.sleep(POLL_INTERVAL)
+                    await self.async_update()
+                return True
+        except asyncio.TimeoutError:
+            return False
+
+    async def async_unsync(self, timeout=TIMEOUT):
         """Unsync this Squeezebox player."""
-        return await self.async_query("sync", "-")
+        if not await self.async_query("sync", "-"):
+            return False
+        await self._wait_for_property("sync_group", [], timeout)

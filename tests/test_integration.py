@@ -12,7 +12,6 @@ import asyncio
 import aiohttp
 import pytest
 from pysqueezebox import Player, Server, async_discover
-from conftest import compare_playlists
 
 # pylint: disable=C0103
 # All test coroutines will be treated as marked.
@@ -88,7 +87,6 @@ async def restore_player_state(test_player, state):
     if state["playlist"]:
         await test_player.async_load_playlist(state["playlist"], "add")
     await test_player.async_set_power(state["power"])
-    await asyncio.sleep(1)
     await test_player.async_time(state["time"])
     await test_player.async_unsync()
     for other_player in state["sync_group"]:
@@ -142,7 +140,9 @@ async def broken_player_fixture(lms):
 @pytest.fixture(name="test_uris", scope="module")
 async def fixture_test_uris(player):
     """Return the first three songs in the database to use in playlist tests."""
-    test_songs = (await player.async_query("songs", "0", "3", "tags:u"))["titles_loop"]
+    test_songs = (
+        await player.async_query("songs", "0", "3", "search:Beatles", "tags:u")
+    )["titles_loop"]
     assert len(test_songs) == 3
     test_uris = [i["url"] for i in test_songs]
     return test_uris
@@ -158,7 +158,7 @@ async def fixture_test_album(player):
             "tracks", "0", "2", f"album_id:{album['id']}", "tags:ju"
         )
         if tracks["count"] > 1 and "coverart" in tracks["titles_loop"][0]:
-            return [track["url"] for track in tracks["titles_loop"]]
+            return [{"url": track["url"]} for track in tracks["titles_loop"]]
 
     pytest.fail("Couldn't find album with cover art and 2+ tracks")
 
@@ -281,15 +281,12 @@ async def test_player_muting(player, broken_player):
     if player.volume == 0:
         assert await player.async_set_volume("+1")
     assert await player.async_set_muting(True)
-    await asyncio.sleep(.5)
     await player.async_update()
     assert player.muting
     assert await player.async_set_muting(True)
-    await asyncio.sleep(.5)
     await player.async_update()
     assert player.muting
     assert await player.async_set_muting(False)
-    await asyncio.sleep(.5)
     await player.async_update()
     assert not player.muting
     await player.async_set_muting(muting)
@@ -299,8 +296,6 @@ async def test_player_muting(player, broken_player):
 async def test_player_volume(player, broken_player):
     """Test Player volume controls."""
     assert await player.async_update()
-    muting = player.muting
-    assert await player.async_set_muting(True)
     assert await player.async_update()
     vol = player.volume
     assert 0 <= vol <= 100
@@ -311,15 +306,12 @@ async def test_player_volume(player, broken_player):
     assert player.volume == new_vol
 
     assert await player.async_set_volume(vol)
-    assert await player.async_set_muting(muting)
 
     assert not await broken_player.async_set_volume(new_vol)
 
 
 async def test_player_play_pause_stop(player, broken_player):
     """Test play and pause controls."""
-    assert await player.async_set_muting(True)
-
     assert await player.async_play()
     assert not await broken_player.async_play()
     await player.async_update()
@@ -372,6 +364,8 @@ async def test_player_load_url_and_index(player, broken_player, test_uris):
     await player.async_update()
     assert len(player.playlist) == 3
 
+    assert await player.async_stop()
+
     assert await player.async_index(0)
     await player.async_update()
     current_track = player.current_track
@@ -402,19 +396,19 @@ async def test_player_playlist(player, broken_player, test_uris):
     assert await player.async_load_playlist(test_playlist, "add")
     assert not await broken_player.async_load_playlist(test_playlist, "add")
     await player.async_update()
-    assert compare_playlists(test_playlist, player.playlist)
+    assert test_playlist == player.playlist_urls
 
     assert await player.async_load_playlist(reversed(test_playlist), "play")
     assert not await broken_player.async_load_playlist(test_playlist, "play")
     await player.async_update()
-    assert compare_playlists(list(reversed(test_playlist)), player.playlist)
+    assert list(reversed(test_playlist)) == player.playlist_urls
 
     await player.async_index(0)
     assert await player.async_load_playlist(test_playlist, "insert")
     assert not await broken_player.async_load_playlist(test_playlist, "insert")
     await player.async_update()
     current_playlist = test_playlist[1:] + test_playlist + test_playlist[:1]
-    assert compare_playlists(current_playlist, player.playlist)
+    assert current_playlist == player.playlist_urls
 
     assert not await player.async_load_playlist(None)
 
@@ -422,13 +416,12 @@ async def test_player_playlist(player, broken_player, test_uris):
 async def test_player_coverart(player, broken_player, test_album):
     """Test album cover art."""
     await player.async_clear_playlist()
-    await player.async_load_url(test_album, "add")
+    await player.async_load_playlist(test_album, "add")
     await player.async_update()
     assert len(player.playlist) > 1
     image_url = player.image_url
     assert player.image_url
     await player.async_index("+1")
-    await asyncio.sleep(1)
     await player.async_update()
     assert player.image_url == image_url  # should be identical for every track
 

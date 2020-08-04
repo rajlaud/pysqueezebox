@@ -58,13 +58,3 @@ def pytest_runtest_setup(item):
     """Skip tests marked 'integration' unless an ip address is given."""
     if "integration" in item.keywords and not item.config.getoption("--ip"):
         pytest.skip("use --ip and an ip address to run integration tests.")
-
-
-def compare_playlists(i, j):
-    """Compare two playlists checking only the urls."""
-    if len(i) == len(j):
-        for idx, val in enumerate(i):
-            if j[idx]["url"] != val["url"]:
-                return False
-        return True
-    return False
