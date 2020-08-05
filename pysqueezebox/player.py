@@ -13,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 TIMEOUT = 5
 
 # how quickly to poll server waiting for command to reach player
-POLL_INTERVAL = 0.5
+POLL_INTERVAL = 0.75
 
 
 # pylint: disable=too-many-public-methods
@@ -319,16 +319,20 @@ class Player:
             sync_group.append(self.sync_master)
         return sync_group
 
-    def create_property_future(self, prop, test):
+    def create_property_future(self, prop, test, interval=POLL_INTERVAL):
         """
         Create a future awaiting a property value.
 
-        'prop': the property to test
-        'test': future satisfied when test(prop) returns true. Must accept test(None).
+        prop: the property to test
+        test: future satisfied when test(prop) returns true. Must accept test(None).
+        interval: how often to poll, defaults to POLL_INTERVAL but may be set to None for
+                  passive wait (optional)
         """
         loop = asyncio.get_running_loop()
         future = loop.create_future()
-        self._property_futures.append({"prop": prop, "test": test, "future": future})
+        self._property_futures.append(
+            {"prop": prop, "test": test, "future": future, "interval": interval}
+        )
         loop.create_task(self.async_update())
         return future
 
@@ -385,22 +389,28 @@ class Player:
 
         # check if any property futures have been satisfied
         property_futures = []
+        interval = None
         for property_future in self._property_futures:
             if not property_future["future"].done():
                 if property_future["test"](getattr(self, property_future["prop"])):
                     property_future["future"].set_result(True)
                 else:
                     property_futures.append(property_future)
+                    if property_future["interval"]:
+                        if not interval or interval > property_future["interval"]:
+                            interval = property_future["interval"]
         self._property_futures = property_futures
 
-        # schedule poll if pending futures, cancel poll if none
-        if len(self._property_futures) > 0 and not self._poll:
+        # schedule poll if pending futures with polling interval
+        if self._poll and not self._poll.done():
+            self._poll.cancel()
+        if len(self._property_futures) > 0 and interval:
 
-            async def _poll():
-                await asyncio.sleep(5)
+            async def _poll(interval):
+                await asyncio.sleep(interval)
                 await self.async_update()
 
-            self._poll = asyncio.create_task(_poll())
+            self._poll = asyncio.create_task(_poll(interval))
         return True
 
     async def async_set_volume(self, volume, timeout=TIMEOUT):
