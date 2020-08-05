@@ -37,6 +37,9 @@ class Player:
         self._playlist_tags = None
         self._name = name
 
+        self._property_futures = []
+        self._poll = None
+
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
 
     def __repr__(self):
@@ -316,17 +319,26 @@ class Player:
             sync_group.append(self.sync_master)
         return sync_group
 
+    def create_property_future(self, prop, test):
+        """
+        Create a future awaiting a property value.
+
+        'prop': the property to test
+        'test': future satisfied when test(prop) returns true. Must accept test(None).
+        """
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self._property_futures.append({"prop": prop, "test": test, "future": future})
+        loop.create_task(self.async_update())
+        return future
+
     async def _wait_for_property(self, prop, value, timeout):
         """Wait for property to hit certain state or timeout."""
         if timeout == 0:
             return True
-        await self.async_update()
         try:
             with async_timeout.timeout(timeout):
-                while getattr(self, prop) != value:
-                    await asyncio.sleep(POLL_INTERVAL)
-                    await self.async_update()
-                return True
+                return await self.create_property_future(prop, lambda x: value == x)
         except asyncio.TimeoutError:
             _LOGGER.error("Timed out waiting for %s to have value %s", prop, value)
             return False
@@ -371,6 +383,24 @@ class Player:
         self._status = {"playlist_loop": self._status.get("playlist_loop")}
         self._status.update(response)
 
+        # check if any property futures have been satisfied
+        property_futures = []
+        for property_future in self._property_futures:
+            if not property_future["future"].done():
+                if property_future["test"](getattr(self, property_future["prop"])):
+                    property_future["future"].set_result(True)
+                else:
+                    property_futures.append(property_future)
+        self._property_futures = property_futures
+
+        # schedule poll if pending futures, cancel poll if none
+        if len(self._property_futures) > 0 and not self._poll:
+
+            async def _poll():
+                await asyncio.sleep(5)
+                await self.async_update()
+
+            self._poll = asyncio.create_task(_poll())
         return True
 
     async def async_set_volume(self, volume, timeout=TIMEOUT):
@@ -436,7 +466,8 @@ class Player:
 
         try:
             async with async_timeout.timeout(timeout):
-                while self.mode == "play":
+                future = self.create_property_future("mode", lambda x: x != "play")
+                while not future.done():
                     await _verified_pause_stop(cmd)
                     await asyncio.sleep(POLL_INTERVAL)
                 return True
@@ -477,9 +508,9 @@ class Player:
         try:
             with async_timeout.timeout(timeout):
                 # We have to use a fuzzy match to see if the player got the command.
-                while not self.time or not position <= self.time <= position + timeout:
-                    await asyncio.sleep(POLL_INTERVAL)
-                    await self.async_update()
+                await self.create_property_future(
+                    "time", lambda time: time and position <= time <= position + timeout
+                )
                 return True
         except asyncio.TimeoutError:
             return False
@@ -591,9 +622,9 @@ class Player:
         await self.async_update()
         try:
             with async_timeout.timeout(timeout):
-                while other_player_id not in self.sync_group:
-                    await asyncio.sleep(POLL_INTERVAL)
-                    await self.async_update()
+                await self.create_property_future(
+                    "sync_group", lambda sync_group: other_player_id in sync_group
+                )
                 return True
         except asyncio.TimeoutError:
             return False
