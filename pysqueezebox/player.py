@@ -41,7 +41,7 @@ class Player:
 
     def __repr__(self):
         """Return representation of Player object."""
-        return f"Player({self._lms}, {self._id}, {self._name}, {self._status}"
+        return f"Player('{self._lms}', '{self._id}', '{self._name}', {self._status})"
 
     @property
     def name(self):
@@ -440,7 +440,7 @@ class Player:
                     await _verified_pause_stop(cmd)
                     await asyncio.sleep(POLL_INTERVAL)
                 return True
-        except TimeoutError:
+        except asyncio.TimeoutError:
             return False
 
     async def async_index(self, index, timeout=TIMEOUT):
@@ -450,9 +450,7 @@ class Player:
         index: if an integer, change to this position. if preceded by a + or -,
                move forward or backward this many tracks. (required)
         """
-        if isinstance(index, str) and (
-            index.startswith("+") or index.startswith("-")
-        ):
+        if isinstance(index, str) and (index.startswith("+") or index.startswith("-")):
             await self.async_update()
             target_index = self.current_index + int(index)
         else:
@@ -469,14 +467,17 @@ class Player:
         if not position:
             return False
 
+        await self.async_update()
+        if self.mode not in ["play", "pause"]:
+            return False
+
         if not await self.async_query("time", position):
             return False
 
-        await self.async_update()
         try:
             with async_timeout.timeout(timeout):
                 # We have to use a fuzzy match to see if the player got the command.
-                while not position <= self.time <= position + TIMEOUT:
+                while not self.time or not position <= self.time <= position + timeout:
                     await asyncio.sleep(POLL_INTERVAL)
                     await self.async_update()
                 return True

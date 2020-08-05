@@ -9,6 +9,7 @@ the volume and must leave the player in the same state as they found it in.
 PLEASE RESPECT THIS.
 """
 import asyncio
+
 import aiohttp
 import pytest
 from pysqueezebox import Player, Server, async_discover
@@ -296,7 +297,6 @@ async def test_player_muting(player, broken_player):
 async def test_player_volume(player, broken_player):
     """Test Player volume controls."""
     assert await player.async_update()
-    assert await player.async_update()
     vol = player.volume
     assert 0 <= vol <= 100
 
@@ -304,14 +304,26 @@ async def test_player_volume(player, broken_player):
     assert await player.async_set_volume(new_vol)
     await player.async_update()
     assert player.volume == new_vol
-
-    assert await player.async_set_volume(vol)
+    assert await player.async_set_volume("+5")
+    await player.async_update()
+    assert player.volume == new_vol + 5
+    assert await player.async_set_volume("-5")
+    await player.async_update()
+    assert player.volume == new_vol
 
     assert not await broken_player.async_set_volume(new_vol)
 
 
-async def test_player_play_pause_stop(player, broken_player):
+async def test_player_play_pause_stop(player, broken_player, test_uris):
     """Test play and pause controls."""
+    # use a local track, as some remote streams do not support pause or seek
+    assert await player.async_load_url(test_uris[0], cmd="load")
+
+    assert await player.async_pause()
+    assert not await broken_player.async_pause()
+    await player.async_update()
+    assert player.mode == "pause"
+
     assert await player.async_play()
     assert not await broken_player.async_play()
     await player.async_update()
@@ -324,11 +336,13 @@ async def test_player_play_pause_stop(player, broken_player):
     assert await player.async_pause()
     assert not await broken_player.async_pause()
     await player.async_update()
-    assert player.mode in ["pause", "stop"]
+    assert player.mode == "pause"
+
+    assert await player.async_time(5)
 
     assert await player.async_pause()
     await player.async_update()
-    assert player.mode in ["pause", "stop"]
+    assert player.mode == "pause"
 
     assert await player.async_toggle_pause()
     assert not await broken_player.async_toggle_pause()
@@ -339,6 +353,8 @@ async def test_player_play_pause_stop(player, broken_player):
     assert not await broken_player.async_stop()
     await player.async_update()
     assert player.mode == "stop"
+
+    assert not await player.async_time(5)
 
 
 async def test_player_load_url_and_index(player, broken_player, test_uris):
@@ -479,5 +495,6 @@ async def test_player_sync(player, other_player, broken_player):
     assert player.player_id in other_player.sync_group
 
     assert not await broken_player.async_sync(player)
+    assert not await broken_player.async_unsync()
     with pytest.raises(RuntimeError):
         assert await player.async_sync(None)

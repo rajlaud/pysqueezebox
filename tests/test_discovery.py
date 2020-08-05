@@ -1,11 +1,11 @@
 """Tests for pysqueezebox.discovery that do not actually require a working server. Does not
 attempt to cover code that is covered by the live discovery test in test_integration.py."""
 
-from asynctest import patch
-from asynctest import Mock, CoroutineMock
 import logging
-import pytest
+
 import pysqueezebox
+import pytest
+from asynctest import CoroutineMock, Mock, patch
 
 # pylint: disable=C0103
 # All test coroutines will be treated as marked.
