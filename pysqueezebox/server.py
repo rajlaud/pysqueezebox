@@ -251,7 +251,8 @@ class Server:
         if category == "albums":
             query.append("tags:jl")
         elif category == "titles":
-            query.append("tags:j")
+            query.append("sort:albumtrack")
+            query.append("tags:ju")
 
         result = await self.async_query(*query)
         try:
@@ -309,7 +310,7 @@ class Server:
         category_list = await self.async_get_category(f"{category}s")
         result = next(item for item in category_list if item["id"] == int(browse_id))
         if result:
-            return result.get(category)
+            return result.get("title")
 
     def generate_image_url_from_track_id(self, track_id):
         """Generate an image url using a track id."""
