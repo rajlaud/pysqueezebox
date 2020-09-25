@@ -1,7 +1,6 @@
 """The pysqueezebox.Player() class."""
 import asyncio
 import logging
-import urllib
 
 import async_timeout
 
@@ -146,30 +145,15 @@ class Player:
         """Return image url of current playing media."""
         if self.current_track and "artwork_url" in self.current_track:
             # we're playing a remote stream with an artwork url
-            image_url = self.current_track["artwork_url"]
-        elif self.current_track and "coverid" in self.current_track:
-            image_url = f"/music/{self.current_track['coverid']}/cover.jpg"
-        else:
-            # querying a coverid without art will result in the default image
-            # we use 'unknown' so that this image can be cached
-            image_url = "/music/unknown/cover.jpg"
-
-        # pylint: disable=protected-access
-        if self._lms._username:
-            base_url = "http://{username}:{password}@{server}:{port}/".format(
-                username=self._lms._username,
-                password=self._lms._password,
-                server=self._lms.host,
-                port=self._lms.port,
-            )
-        else:
-            base_url = "http://{server}:{port}/".format(
-                server=self._lms.host, port=self._lms.port
+            return self.current_track["artwork_url"]
+        if self.current_track and "coverid" in self.current_track:
+            return self._lms.generate_image_url_from_track_id(
+                self.current_track["coverid"]
             )
 
-        url = urllib.parse.urljoin(base_url, image_url)
-
-        return url
+        # querying a coverid without art will result in the default image
+        # we use 'unknown' so that this image can be cached
+        return self._lms.generate_image_url("/music/unknown/cover.jpg")
 
     @property
     def current_index(self):
@@ -186,7 +170,8 @@ class Player:
         except KeyError:
             pass
         try:
-            return self._status["playlist_loop"][self.current_index]
+            if self.current_index:
+                return self._status["playlist_loop"][self.current_index]
         except (KeyError, IndexError):
             pass
         return None
@@ -644,3 +629,11 @@ class Player:
         if not await self.async_query("sync", "-"):
             return False
         await self._wait_for_property("sync_group", [], timeout)
+
+    async def async_browse(self, category, limit=None, **kwargs):
+        """
+        Browse the music library.
+
+        See Server.async_browse for parameters.
+        """
+        return await self._lms.async_browse(category, limit=limit, **kwargs)

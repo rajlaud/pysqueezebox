@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import urllib
 
 import aiohttp
 import async_timeout
@@ -55,6 +56,11 @@ class Server:
         self.name = name  # often None, can only be found during discovery
 
         self.status = None
+        self.artists = None
+        self.albums = None
+        self.titles = None
+        self.genres = None
+        self.playlists = None
 
     def __repr__(self):
         """Return representation of Server object."""
@@ -186,3 +192,142 @@ class Server:
             return result
         except KeyError:
             _LOGGER.error("Received invalid response: %s", data)
+
+    async def async_browse(self, category, limit=None, browse_id=None):
+        """
+        Browse the music library.
+
+        Returns a dictionary with the following keys:
+            title: item being browsed, e.g., "Artists", "Jimi Hendrix", "Jazz"
+            items: list of dictionaries
+              title: title of item
+              id: unique identifier for item
+              image_url (optional): image url if available. will not be set if unavailable
+
+        Parameters:
+            category: playlists, playlist, albums, album, artists, artist, titles, genres, genre
+            limit (optional): set maximum number of results
+            browse_id (optional): tuple of id type and value
+              id type: "album_id", "artist_id", "genre_id", or "track_id"
+              value: the id
+        """
+
+        browse = {}
+        search = f"{browse_id[0]}:{browse_id[1]}" if browse_id else None
+
+        if category in ["playlist", "album", "artist", "genre"]:
+            browse["title"] = await self.async_get_category_title(
+                category, browse_id[1]
+            )
+        else:
+            browse["title"] = category.title()
+
+        if category in ["playlist", "album"]:
+            item_type = "titles"
+        elif category in ["genre"]:
+            item_type = "artists"
+        elif category in ["artist"]:
+            item_type = "albums"
+        else:
+            item_type = category
+
+        items = await self.async_get_category(item_type, limit, search)
+
+        browse["items"] = items
+        return browse
+
+    async def async_get_count(self, category):
+        """Return number of category in database."""
+
+        result = await self.async_query(category, "0", "1", "count")
+        return result["count"]
+
+    async def async_query_category(self, category, limit=None, search=None):
+        """Return list of entries in category, optionally filtered by search string."""
+        if not limit:
+            limit = await self.async_get_count(category)
+        query = [category, "0", f"{limit}", search]
+
+        if category == "albums":
+            query.append("tags:jl")
+        elif category == "titles":
+            query.append("tags:j")
+
+        result = await self.async_query(*query)
+        try:
+            items = result[f"{category}_loop"]
+            for item in items:
+                item["title"] = item.pop(category[:-1])
+
+                if category in ["albums", "titles"]:
+                    if "artwork_track_id" in item:
+                        item["image_url"] = self.generate_image_url_from_track_id(
+                            item["artwork_track_id"]
+                        )
+            return items
+
+        except KeyError:
+            _LOGGER.error("Could not find results loop for category %s", category)
+
+    async def async_get_category(self, category, limit=None, search=None):
+        """Update cache of library category if needed and return result."""
+
+        if (
+            category not in ["artists", "albums", "titles", "genres", "playlists"]
+            or search is not None
+        ):
+            return await self.async_query_category(category, limit, search)
+
+        status = await self.async_status()
+        if "lastscan" in status and self.__dict__[category]:
+            if status["lastscan"] <= self.__dict__[category][0]:
+                _LOGGER.debug("Using cached category %s", category)
+                return self.__dict__[category][1]
+
+        _LOGGER.debug("Updating cache for category %s", category)
+        if self.__dict__[category]:
+            _LOGGER.debug(
+                "Server lastscan %s different than playlist lastscan %s",
+                status.get("lastscan"),
+                self.__dict__[category][0],
+            )
+        else:
+            _LOGGER.debug("Category %s not set", category)
+        result = await self.async_query_category(category)
+        status = await self.async_status()
+        self.__dict__[category] = (status.get("lastscan"), result)
+        if limit:
+            return self.__dict__[category][1][:limit]
+        return self.__dict__[category][1]
+
+    async def async_get_category_title(self, category, browse_id):
+        """
+        Search of the category name corresponding to a title.
+
+        Use the cache because of a bug in how LMS handles this search.
+        """
+        category_list = await self.async_get_category(f"{category}s")
+        result = next(item for item in category_list if item["id"] == int(browse_id))
+        if result:
+            return result.get(category)
+
+    def generate_image_url_from_track_id(self, track_id):
+        """Generate an image url using a track id."""
+        return self.generate_image_url(f"/music/{track_id}/cover.jpg")
+
+    def generate_image_url(self, image_url):
+        """Add the appropriate base_url to a relative image_url."""
+
+        if self._username:
+            base_url = "http://{username}:{password}@{server}:{port}/".format(
+                username=self._username,
+                password=self._password,
+                server=self.host,
+                port=self.port,
+            )
+        else:
+            base_url = "http://{server}:{port}/".format(
+                server=self.host, port=self.port
+            )
+
+        return urllib.parse.urljoin(base_url, image_url)
