@@ -14,6 +14,8 @@ import aiohttp
 import pytest
 from pysqueezebox import Player, Server, async_discover
 
+BROWSE_LIMIT = 50
+
 # pylint: disable=C0103
 # All test coroutines will be treated as marked.
 pytestmark = pytest.mark.asyncio
@@ -217,6 +219,32 @@ async def test_get_player(lms, player):
     # check that we handle a name as player_id correctly
     test_player_c = await lms.async_get_player(player.name)
     assert player.player_id == test_player_c.player_id
+
+
+async def test_browse(lms):
+    """Test browsing the library."""
+    categories = [
+        ("playlists", "playlist_id"),
+        ("artists", "artist_id"),
+        ("genres", "genre_id"),
+        ("albums", "album_id"),
+    ]
+
+    for category in categories:
+        await lookup_helper(lms, category[0], category[1])
+
+
+async def lookup_helper(lms, category, id_type):
+    """Lookup a known item and make sure the name matches."""
+    result = await lms.async_browse(category, limit=BROWSE_LIMIT)
+    assert result["title"] is not None
+    assert len(result["items"]) > 0
+    browse_id = result["items"][0].get("id")
+    title = result["items"][0].get("title")
+    result = await lms.async_browse(
+        category[:-1], limit=BROWSE_LIMIT, browse_id=(id_type, browse_id)
+    )
+    assert result["title"] == title
 
 
 def print_properties(player):
