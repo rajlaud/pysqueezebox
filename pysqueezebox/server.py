@@ -60,7 +60,6 @@ class Server:
         self.albums = None
         self.titles = None
         self.genres = None
-        self.playlists = None
 
     def __repr__(self):
         """Return representation of Server object."""
@@ -246,7 +245,13 @@ class Server:
         """Return list of entries in category, optionally filtered by search string."""
         if not limit:
             limit = await self.async_get_count(category)
-        query = [category, "0", f"{limit}", search]
+        if search and "playlist_id" in search:
+            # workaround LMS bug - playlist_id doesn't work for "titles" search
+            query = ["playlists", "tracks", "0", f"{limit}", search]
+            query.append("tags:ju")
+            category = "playlisttracks"
+        else:
+            query = [category, "0", f"{limit}", search]
 
         if category == "albums":
             query.append("tags:jl")
@@ -258,9 +263,10 @@ class Server:
         try:
             items = result[f"{category}_loop"]
             for item in items:
-                item["title"] = item.pop(category[:-1])
+                if category != "playlisttracks":
+                    item["title"] = item.pop(category[:-1])
 
-                if category in ["albums", "titles"]:
+                if category in ["albums", "titles", "playlisttracks"]:
                     if "artwork_track_id" in item:
                         item["image_url"] = self.generate_image_url_from_track_id(
                             item["artwork_track_id"]
@@ -269,12 +275,13 @@ class Server:
 
         except KeyError:
             _LOGGER.error("Could not find results loop for category %s", category)
+            _LOGGER.error("Got result %s", result)
 
     async def async_get_category(self, category, limit=None, search=None):
         """Update cache of library category if needed and return result."""
 
         if (
-            category not in ["artists", "albums", "titles", "genres", "playlists"]
+            category not in ["artists", "albums", "titles", "genres"]
             or search is not None
         ):
             return await self.async_query_category(category, limit, search)

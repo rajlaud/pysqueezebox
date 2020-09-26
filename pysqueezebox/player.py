@@ -170,7 +170,7 @@ class Player:
         except KeyError:
             pass
         try:
-            if self.current_index:
+            if self.current_index is not None:
                 return self._status["playlist_loop"][self.current_index]
         except (KeyError, IndexError):
             pass
@@ -342,6 +342,11 @@ class Player:
 
         Return True if successful, False if update fails.
         """
+
+        # cancel pending poll if we were called manually
+        if self._poll and not self._poll.done():
+            self._poll.cancel()
+
         tags = "acdIKlNorTux"
         if add_tags:
             tags = "".join(set(tags + add_tags))
@@ -387,16 +392,13 @@ class Player:
         self._property_futures = property_futures
 
         # schedule poll if pending futures with polling interval
-        if self._poll and not self._poll.done():
-            self._poll.cancel()
         if len(self._property_futures) > 0 and interval:
-
-            async def _poll(interval):
-                await asyncio.sleep(interval)
-                await self.async_update()
-
-            self._poll = asyncio.create_task(_poll(interval))
+            self._poll = asyncio.create_task(self._async_poll(interval))
         return True
+
+    async def _async_poll(self, interval):
+        await asyncio.sleep(interval)
+        asyncio.create_task(self.async_update())
 
     async def async_set_volume(self, volume, timeout=TIMEOUT):
         """Set volume level, range 0..100, or +/- integer."""
