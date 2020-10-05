@@ -170,9 +170,9 @@ class Player:
         except KeyError:
             pass
         try:
-            if self.current_index is not None:
-                return self._status["playlist_loop"][self.current_index]
-        except (KeyError, IndexError):
+            if self.playlist and self.current_index is not None:
+                return self.playlist[self.current_index]
+        except IndexError:
             pass
         return None
 
