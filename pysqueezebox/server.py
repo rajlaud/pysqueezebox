@@ -260,6 +260,9 @@ class Server:
             query.append("tags:ju")
 
         result = await self.async_query(*query)
+        if result is None or result.get('count') == 0:
+            return None
+
         try:
             items = result[f"{category}_loop"]
             for item in items:
