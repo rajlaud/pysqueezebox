@@ -290,7 +290,7 @@ class Server:
             return await self.async_query_category(category, limit, search)
 
         status = await self.async_status()
-        if "lastscan" in status and self.__dict__[category]:
+        if "lastscan" in status and self.__dict__[category] is not None:
             if status["lastscan"] <= self.__dict__[category][0]:
                 _LOGGER.debug("Using cached category %s", category)
                 return self.__dict__[category][1]
@@ -306,8 +306,8 @@ class Server:
             _LOGGER.debug("Category %s not set", category)
         result = await self.async_query_category(category)
         status = await self.async_status()
-        self.__dict__[category] = (status.get("lastscan"), result)
-        if limit:
+        self.__dict__[category] = (status.get("lastscan", 0), result)
+        if limit and self.__dict__[category][1] is not None:
             return self.__dict__[category][1][:limit]
         return self.__dict__[category][1]
 
