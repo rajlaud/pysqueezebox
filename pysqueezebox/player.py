@@ -145,7 +145,11 @@ class Player:
         """Return image url of current playing media."""
         if self.current_track and "artwork_url" in self.current_track:
             # we're playing a remote stream with an artwork url
-            return self.current_track["artwork_url"]
+            artwork_url = self.current_track["artwork_url"]
+            # some plugins generate a relative artwork_url
+            if not artwork_url.startswith("http"):
+                artwork_url = self._lms.generate_image_url(artwork_url)
+            return artwork_url
         if self.current_track and "coverid" in self.current_track:
             return self._lms.generate_image_url_from_track_id(
                 self.current_track["coverid"]
