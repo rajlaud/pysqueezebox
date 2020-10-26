@@ -233,10 +233,13 @@ async def test_browse(lms):
     for category in categories:
         await lookup_helper(lms, category[0], category[1])
 
+    # test lookup without limit
+    await lookup_helper(lms, "artists", "artist_id")
 
-async def lookup_helper(lms, category, id_type):
+
+async def lookup_helper(lms, category, id_type, limit=BROWSE_LIMIT):
     """Lookup a known item and make sure the name matches."""
-    result = await lms.async_browse(category, limit=BROWSE_LIMIT)
+    result = await lms.async_browse(category, limit)
     assert result["title"] is not None
     assert len(result["items"]) > 0
     browse_id = result["items"][0].get("id")

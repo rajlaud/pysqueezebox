@@ -292,9 +292,17 @@ class Server:
         status = await self.async_status()
         if "lastscan" in status and self.__dict__[category] is not None:
             cached_category = self.__dict__[category]
-            if status["lastscan"] <= cached_category[0] and limit <= cached_category[1]:
-                _LOGGER.debug("Using cached category %s", category)
-                return self.__dict__[category][2]
+            if status["lastscan"] <= cached_category[0]:
+                if limit is None:
+                    if cached_category[1] is None:
+                        _LOGGER.debug("Using cached category %s", category)
+                        return self.__dict__[category][2]
+                else:
+                    if cached_category[1] is None or limit <= cached_category[1]:
+                        _LOGGER.debug(
+                            "Using cached category %s with limit %s", category, limit
+                        )
+                        return self.__dict__[category][2][:limit]
 
         _LOGGER.debug("Updating cache for category %s", category)
         if self.__dict__[category] is not None:
