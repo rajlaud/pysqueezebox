@@ -1,10 +1,9 @@
 """
 The following tests check the pysqueezebox.Player module while mocking I/O.
 """
-from unittest.mock import call, patch
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
-from asynctest import CoroutineMock
 from pysqueezebox import Player, Server
 
 # pylint: disable=C0103
@@ -34,7 +33,7 @@ async def test_image_url():
 
 async def test_wait():
     """Test player._wait_for_property()."""
-    with patch.object(Player, "async_update", CoroutineMock()):
+    with patch.object(Player, "async_update", AsyncMock()):
         mock_player = Player(None, "00:11:22:33:44:55", "Test Player")
         await mock_player._wait_for_property(None, None, 0)
         mock_player.async_update.assert_not_called()
@@ -47,13 +46,9 @@ async def test_wait():
 
 async def test_verified_pause():
     """Test player._verified_pause_stop."""
-    with patch.object(
-        Player, "async_query", CoroutineMock(return_val=True)
-    ), patch.object(
-        Player, "async_update", CoroutineMock(return_val=True)
-    ), patch.object(
-        Player, "mode", "play"
-    ):
+    with patch.object(Player, "async_query", AsyncMock(return_val=True)), patch.object(
+        Player, "async_update", AsyncMock(return_val=True)
+    ), patch.object(Player, "mode", "play"):
         mock_player = Player(None, "11:22:33:44:55", "Test Player")
         assert not await mock_player.async_pause(timeout=0.1)
         pause_args = ["pause", "1"]

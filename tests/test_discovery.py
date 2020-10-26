@@ -2,10 +2,10 @@
 attempt to cover code that is covered by the live discovery test in test_integration.py."""
 
 import logging
+from unittest.mock import AsyncMock, Mock, patch
 
 import pysqueezebox
 import pytest
-from asynctest import CoroutineMock, Mock, patch
 
 # pylint: disable=C0103
 # All test coroutines will be treated as marked.
@@ -32,7 +32,7 @@ async def test_bad_response():
 async def test_callbacks():
     """Test detection and handling of both sync and async callbacks."""
     callback = Mock()
-    async_callback = CoroutineMock()
+    async_callback = AsyncMock()
 
     with patch(
         "pysqueezebox.discovery._unpack_discovery_response", return_value=RESPONSE
