@@ -260,7 +260,7 @@ class Server:
             query.append("tags:ju")
 
         result = await self.async_query(*query)
-        if result is None or result.get('count') == 0:
+        if result is None or result.get("count") == 0:
             return None
 
         try:
@@ -291,12 +291,13 @@ class Server:
 
         status = await self.async_status()
         if "lastscan" in status and self.__dict__[category] is not None:
-            if status["lastscan"] <= self.__dict__[category][0]:
+            cached_category = self.__dict__[category]
+            if status["lastscan"] <= cached_category[0] and limit <= cached_category[1]:
                 _LOGGER.debug("Using cached category %s", category)
-                return self.__dict__[category][1]
+                return self.__dict__[category][2]
 
         _LOGGER.debug("Updating cache for category %s", category)
-        if self.__dict__[category]:
+        if self.__dict__[category] is not None:
             _LOGGER.debug(
                 "Server lastscan %s different than playlist lastscan %s",
                 status.get("lastscan"),
@@ -304,12 +305,13 @@ class Server:
             )
         else:
             _LOGGER.debug("Category %s not set", category)
-        result = await self.async_query_category(category)
+        result = await self.async_query_category(category, limit=limit)
         status = await self.async_status()
-        self.__dict__[category] = (status.get("lastscan", 0), result)
-        if limit and self.__dict__[category][1] is not None:
-            return self.__dict__[category][1][:limit]
-        return self.__dict__[category][1]
+        self.__dict__[category] = (status.get("lastscan"), limit, result)
+
+        if limit:
+            return self.__dict__[category][2][:limit]
+        return self.__dict__[category][2]
 
     async def async_get_category_title(self, category, browse_id):
         """
