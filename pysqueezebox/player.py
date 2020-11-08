@@ -643,3 +643,7 @@ class Player:
         See Server.async_browse for parameters.
         """
         return await self._lms.async_browse(category, limit=limit, **kwargs)
+
+    def generate_image_url_from_track_id(self, track_id):
+        """Return the image url for a track_id."""
+        return self._lms.generate_image_url_from_track_id(track_id)
