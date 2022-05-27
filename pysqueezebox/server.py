@@ -122,7 +122,8 @@ class Server:
             if len(players) >= 1:
                 if len(players) > 1:
                     _LOGGER.warning(
-                        "Found more than one player matching %s.", name,
+                        "Found more than one player matching %s.",
+                        name,
                     )
                 _LOGGER.debug("get_player(name=%s) return player %s.", name, players[0])
                 return players[0]
@@ -157,7 +158,7 @@ class Server:
             raise ValueError("async_query() called with Server.session unset")
 
         try:
-            with async_timeout.timeout(TIMEOUT):
+            async with async_timeout.timeout(TIMEOUT):
                 response = await self.session.post(url, data=data, auth=auth)
                 self.http_status = response.status
 

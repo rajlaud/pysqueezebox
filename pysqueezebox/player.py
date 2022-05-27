@@ -330,7 +330,7 @@ class Player:
         if timeout == 0:
             return True
         try:
-            with async_timeout.timeout(timeout):
+            async with async_timeout.timeout(timeout):
                 return await self.create_property_future(prop, lambda x: value == x)
         except asyncio.TimeoutError:
             _LOGGER.error("Timed out waiting for %s to have value %s", prop, value)
@@ -507,7 +507,7 @@ class Player:
             return False
 
         try:
-            with async_timeout.timeout(timeout):
+            async with async_timeout.timeout(timeout):
                 # We have to use a fuzzy match to see if the player got the command.
                 await self.create_property_future(
                     "time", lambda time: time and position <= time <= position + timeout
@@ -622,7 +622,7 @@ class Player:
 
         await self.async_update()
         try:
-            with async_timeout.timeout(timeout):
+            async with async_timeout.timeout(timeout):
                 await self.create_property_future(
                     "sync_group", lambda sync_group: other_player_id in sync_group
                 )
