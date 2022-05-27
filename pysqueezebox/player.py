@@ -1,6 +1,7 @@
 """The pysqueezebox.Player() class."""
 import asyncio
 import logging
+from re import A
 
 import async_timeout
 
@@ -528,21 +529,30 @@ class Player:
         Play a specific track by url.
 
         cmd: "play" or "load" - replace current playlist (default)
+        cmd: "play_now" - adds to current spot in playlist
         cmd: "insert" - adds next in playlist
         cmd: "add" - adds to end of playlist
         """
-        if cmd in ["insert", "add"] and self.playlist:
+        index = self.current_index or 0
+
+        if cmd in ["play_now", "insert", "add"] and self.playlist:
             await self.async_update()
             target_playlist = self.playlist_urls
             if cmd == "add":
                 target_playlist.append({"url": url})
             else:
-                target_playlist.insert(self.current_index + 1, {"url": url})
+                if cmd == "insert":
+                    index += 1
+                target_playlist.insert(index, {"url": url})
         else:
             target_playlist = [{"url": url}]
 
-        if not await self.async_query("playlist", cmd, url):
-            return False
+        if cmd == "play_now":
+            await self.async_load_playlist(target_playlist)
+            await self.async_index(index)
+        else:
+            if not await self.async_query("playlist", cmd, url):
+                return False
         return await self._wait_for_property("playlist_urls", target_playlist, timeout)
 
     async def async_load_playlist(self, playlist_ref, cmd="load"):

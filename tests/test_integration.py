@@ -144,9 +144,9 @@ async def broken_player_fixture(lms):
 async def fixture_test_uris(player):
     """Return the first three songs in the database to use in playlist tests."""
     test_songs = (
-        await player.async_query("songs", "0", "3", "search:Beatles", "tags:u")
+        await player.async_query("songs", "0", "4", "search:Beatles", "tags:u")
     )["titles_loop"]
-    assert len(test_songs) == 3
+    assert len(test_songs) == 4
     test_uris = [i["url"] for i in test_songs]
     return test_uris
 
@@ -427,6 +427,13 @@ async def test_player_load_url_and_index(player, broken_player, test_uris):
 
     assert await player.async_load_url(test_uris[2], "insert")
     assert not await broken_player.async_load_url(test_uris[2], "insert")
+    await player.async_index("+1")
+    await player.async_update()
+    assert player.current_track["url"] == test_uris[2]
+
+    assert await player.async_load_url(test_uris[3], "play_now")
+    assert not await broken_player.async_load_url(test_uris[3], "play_now")
+    assert player.current_track["url"] == test_uris[3]
     await player.async_index("+1")
     await player.async_update()
     assert player.current_track["url"] == test_uris[2]
