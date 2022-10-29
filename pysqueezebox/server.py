@@ -56,10 +56,7 @@ class Server:
         self.name = name  # often None, can only be found during discovery
 
         self.status = None
-        self.artists = None
-        self.albums = None
-        self.titles = None
-        self.genres = None
+        self._browse_cache = {}  # key: category; value: (lastscan, limit, items)
 
     def __repr__(self):
         """Return representation of Server object."""
@@ -211,7 +208,6 @@ class Server:
               id type: "album_id", "artist_id", "genre_id", or "track_id"
               value: the id
         """
-
         browse = {}
         search = f"{browse_id[0]}:{browse_id[1]}" if browse_id else None
 
@@ -238,7 +234,6 @@ class Server:
 
     async def async_get_count(self, category):
         """Return number of category in database."""
-
         result = await self.async_query(category, "0", "1", "count")
         return result["count"]
 
@@ -283,7 +278,6 @@ class Server:
 
     async def async_get_category(self, category, limit=None, search=None):
         """Update cache of library category if needed and return result."""
-
         if (
             category not in ["artists", "albums", "titles", "genres"]
             or search is not None
@@ -291,36 +285,42 @@ class Server:
             return await self.async_query_category(category, limit, search)
 
         status = await self.async_status()
-        if "lastscan" in status and self.__dict__[category] is not None:
-            cached_category = self.__dict__[category]
+        cached_category = self._browse_cache[category]
+        if "lastscan" in status and cached_category is not None:
             if status["lastscan"] <= cached_category[0]:
                 if limit is None:
                     if cached_category[1] is None:
                         _LOGGER.debug("Using cached category %s", category)
-                        return self.__dict__[category][2]
+                        return cached_category[2]
                 else:
                     if cached_category[1] is None or limit <= cached_category[1]:
                         _LOGGER.debug(
                             "Using cached category %s with limit %s", category, limit
                         )
-                        return self.__dict__[category][2][:limit]
+                        return cached_category[2][:limit]
 
         _LOGGER.debug("Updating cache for category %s", category)
-        if self.__dict__[category] is not None:
+        if cached_category is not None:
             _LOGGER.debug(
                 "Server lastscan %s different than playlist lastscan %s",
                 status.get("lastscan"),
-                self.__dict__[category][0],
+                cached_category[0],
             )
         else:
             _LOGGER.debug("Category %s not set", category)
         result = await self.async_query_category(category, limit=limit)
         status = await self.async_status()
-        self.__dict__[category] = (status.get("lastscan"), limit, result)
 
-        if limit:
-            return self.__dict__[category][2][:limit]
-        return self.__dict__[category][2]
+        # only save useful results where library has lastscan value
+        if status["lastscan"] is not None:
+            cached_category = (status.get("lastscan"), limit, result)
+
+            if limit:
+                return cached_category[2][:limit]
+            return cached_category[2]
+        else:
+            cached_category = None
+            return result
 
     async def async_get_category_title(self, category, browse_id):
         """
@@ -339,7 +339,6 @@ class Server:
 
     def generate_image_url(self, image_url):
         """Add the appropriate base_url to a relative image_url."""
-
         if self._username:
             base_url = "http://{username}:{password}@{server}:{port}/".format(
                 username=self._username,

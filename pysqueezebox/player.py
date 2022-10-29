@@ -1,8 +1,6 @@
 """The pysqueezebox.Player() class."""
 import asyncio
 import logging
-from re import A
-
 import async_timeout
 
 from .const import REPEAT_MODE, SHUFFLE_MODE
@@ -347,7 +345,6 @@ class Player:
 
         Return True if successful, False if update fails.
         """
-
         # cancel pending poll if we were called manually
         if self._poll and not self._poll.done():
             self._poll.cancel()
@@ -494,9 +491,7 @@ class Player:
         return await self._wait_for_property("current_index", target_index, timeout)
 
     async def async_time(self, position, timeout=TIMEOUT):
-        """
-        Seek to a particular time in track.
-        """
+        """Seek to a particular time in track."""
         if not position:
             return False
 
