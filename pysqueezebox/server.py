@@ -285,7 +285,7 @@ class Server:
             return await self.async_query_category(category, limit, search)
 
         status = await self.async_status()
-        cached_category = self._browse_cache[category]
+        cached_category = self._browse_cache.get(category)
         if "lastscan" in status and cached_category is not None:
             if status["lastscan"] <= cached_category[0]:
                 if limit is None:
