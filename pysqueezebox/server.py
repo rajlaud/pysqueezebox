@@ -288,6 +288,8 @@ class Server:
         cached_category = self._browse_cache.get(category)
         if "lastscan" in status and cached_category is not None:
             if status["lastscan"] <= cached_category[0]:
+                if cached_category[2] is None:
+                    return None
                 if limit is None:
                     if cached_category[1] is None:
                         _LOGGER.debug("Using cached category %s", category)
