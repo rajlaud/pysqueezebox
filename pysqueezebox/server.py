@@ -313,14 +313,13 @@ class Server:
 
         # only save useful results where library has lastscan value
         if status["lastscan"] is not None:
-            cached_category = (status.get("lastscan"), limit, result)
-
-            if limit:
-                return cached_category[2][:limit]
-            return cached_category[2]
+            self._browse_cache[category] = (status.get("lastscan"), limit, result)
         else:
-            cached_category = None
-            return result
+            self._browse_cache[category] = None
+
+        if limit and result is not None:
+            return result[:limit]
+        return result
 
     async def async_get_category_title(self, category, browse_id):
         """
