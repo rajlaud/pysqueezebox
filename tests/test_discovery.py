@@ -4,8 +4,9 @@ attempt to cover code that is covered by the live discovery test in test_integra
 import logging
 from unittest.mock import AsyncMock, Mock, patch
 
-import pysqueezebox
 import pytest
+
+import pysqueezebox
 
 # pylint: disable=C0103
 # All test coroutines will be treated as marked.
