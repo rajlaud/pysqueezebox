@@ -377,7 +377,11 @@ class Player:
 
         # preserve the playlist between updates
         self._status = {"playlist_loop": self._status.get("playlist_loop")}
-        self._status.update(response)
+        try:
+            self._status.update(response)
+        except TypeError:
+            _LOGGER.debug("Error updating status - empty response from server")
+            return False
 
         # check if any property futures have been satisfied
         property_futures = []
