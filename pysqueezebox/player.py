@@ -369,6 +369,10 @@ class Player:
                 response = await self.async_query(
                     "status", "0", response["playlist_tracks"], f"tags:{tags}"
                 )
+
+                if response is False:
+                    _LOGGER.debug("Error updating status - unable to retrieve playlist")
+                    return False
             else:
                 response.pop("playlist_loop", None)
         else:
@@ -377,11 +381,7 @@ class Player:
 
         # preserve the playlist between updates
         self._status = {"playlist_loop": self._status.get("playlist_loop")}
-        try:
-            self._status.update(response)
-        except TypeError:
-            _LOGGER.debug("Error updating status - empty response from server")
-            return False
+        self._status.update(response)
 
         # check if any property futures have been satisfied
         property_futures = []
