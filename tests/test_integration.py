@@ -28,7 +28,7 @@ REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 async def fixture_lms(request):
     """Return a working Server object."""
     # Get the ip address and port from the command line
-    ip = IP if IP else request.config.option.IP
+    ip = request.config.option.IP if request.config.option.IP else IP
     port = request.config.option.PORT
     https = request.config.option.HTTPS
 
