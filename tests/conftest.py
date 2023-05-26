@@ -36,6 +36,15 @@ def pytest_addoption(parser):
     )
 
     parser.addoption(
+        "--https",
+        type=bool,
+        default=False,
+        action="store",
+        dest="HTTPS",
+        help="whether to use https to connect",
+    )
+
+    parser.addoption(
         "--prefer-player",
         type=str,
         default=None,

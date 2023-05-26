@@ -30,12 +30,13 @@ async def fixture_lms(request):
     # Get the ip address and port from the command line
     ip = IP if IP else request.config.option.IP
     port = request.config.option.PORT
+    https = request.config.option.HTTPS
 
     if ip is None:
         pytest.fail("No ip address specified. Use the --ip option.")
 
     async with aiohttp.ClientSession() as session:
-        server = Server(session, ip, port)
+        server = Server(session, ip, port, https=https)
         # confirm server is working
         assert await server.async_status()
         yield server
