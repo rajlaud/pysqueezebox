@@ -16,14 +16,14 @@ def event_loop():
 
 
 def pytest_addoption(parser):
-    """Add the --ip and --port commandline options"""
+    """Add the commandline options"""
     parser.addoption(
-        "--ip",
+        "--host",
         type=str,
         default=None,
         action="store",
-        dest="IP",
-        help="the IP address for the squeezebox server to be used for the integration tests",
+        dest="HOST",
+        help="the host for the squeezebox server to be used for the integration tests",
     )
 
     parser.addoption(
@@ -33,6 +33,15 @@ def pytest_addoption(parser):
         action="store",
         dest="PORT",
         help="the port for the squeezebox server to be used for the integration tests",
+    )
+
+    parser.addoption(
+        "--https",
+        type=bool,
+        default=False,
+        action="store",
+        dest="HTTPS",
+        help="whether to use https to connect",
     )
 
     parser.addoption(

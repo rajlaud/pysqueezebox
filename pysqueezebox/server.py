@@ -32,6 +32,7 @@ class Server:
         password=None,
         uuid=None,
         name=None,
+        https=False,
     ):
         """
         Initialize the Logitech device.
@@ -50,6 +51,7 @@ class Server:
         self.session = session
         self._username = username
         self._password = password
+        self._prefix = "https" if https else "http"
 
         self.http_status = None
         self.uuid = uuid
@@ -67,7 +69,8 @@ class Server:
             f"{self._username}, "
             f"{self._password}, "
             f"{self.uuid}, "
-            f"{self.name})"
+            f"{self.name}, "
+            f"{self._prefix})"
         )
 
     async def async_get_players(self, search=None):
@@ -144,7 +147,7 @@ class Server:
             if self._username is None
             else aiohttp.BasicAuth(self._username, self._password)
         )
-        url = f"http://{self.host}:{self.port}/jsonrpc.js"
+        url = f"{self._prefix}://{self.host}:{self.port}/jsonrpc.js"
         data = json.dumps(
             {"id": "1", "method": "slim.request", "params": [player, command]}
         )
@@ -340,16 +343,10 @@ class Server:
 
     def generate_image_url(self, image_url):
         """Add the appropriate base_url to a relative image_url."""
+        base_url = f"{self._prefix}://"
         if self._username:
-            base_url = "http://{username}:{password}@{server}:{port}/".format(
-                username=self._username,
-                password=self._password,
-                server=self.host,
-                port=self.port,
-            )
-        else:
-            base_url = "http://{server}:{port}/".format(
-                server=self.host, port=self.port
-            )
+            base_url += f"{self._username}:{self._password}@"
+
+        base_url += f"{self.host}:{self.port}/"
 
         return urllib.parse.urljoin(base_url, image_url)

@@ -28,14 +28,15 @@ REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 async def fixture_lms(request):
     """Return a working Server object."""
     # Get the ip address and port from the command line
-    ip = IP if IP else request.config.option.IP
+    ip = request.config.option.HOST if request.config.option.HOST else IP
     port = request.config.option.PORT
+    https = request.config.option.HTTPS
 
     if ip is None:
         pytest.fail("No ip address specified. Use the --ip option.")
 
     async with aiohttp.ClientSession() as session:
-        server = Server(session, ip, port)
+        server = Server(session, ip, port, https=https)
         # confirm server is working
         assert await server.async_status()
         yield server
