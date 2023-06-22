@@ -345,7 +345,10 @@ class Server:
         """Add the appropriate base_url to a relative image_url."""
         base_url = f"{self._prefix}://"
         if self._username:
-            base_url += f"{self._username}:{self._password}@"
+            base_url += urllib.parse.quote(self._username, safe="")
+            base_url += ":"
+            base_url += urllib.parse.quote(self._password, safe="")
+            base_url += "@"
 
         base_url += f"{self.host}:{self.port}/"
 

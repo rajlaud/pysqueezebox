@@ -23,11 +23,11 @@ async def test_repr():
 
 async def test_image_url():
     """Test creating image urls."""
-    lms = Server(None, "192.168.1.1", username="test", password="password")
+    lms = Server(None, "192.168.1.1", username="test#", password="~/.$password")
     player = Player(lms, "00:11:22:33:44:55", "Test Player")
     assert (
         player.image_url
-        == "http://test:password@192.168.1.1:9000/music/unknown/cover.jpg"
+        == "http://test%23:~%2F.%24password@192.168.1.1:9000/music/unknown/cover.jpg"
     )
 
 
