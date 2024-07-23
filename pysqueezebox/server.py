@@ -177,11 +177,11 @@ class Server:
             if player:
                 _LOGGER.info("Query run on unknown player %s", player)
             else:
-                _LOGGER.error("Failed communicating with LMS: %s", type(error))
+                _LOGGER.error("Failed communicating with LMS(%s): %s", url, type(error))
             return False
 
         except (asyncio.TimeoutError, aiohttp.ClientError) as error:
-            _LOGGER.error("Failed communicating with LMS: %s", type(error))
+            _LOGGER.error("Failed communicating with LMS(%s): %s", url , type(error))
             return False
 
         try:
