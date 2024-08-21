@@ -1,4 +1,5 @@
 """The pysqueezebox.Server() class."""
+
 import asyncio
 import json
 import logging
@@ -22,7 +23,7 @@ class Server:
     squeezebox integration are implemented.
     """
 
-    # pylint: disable=too-many-arguments, bad-continuation
+    # pylint: disable=too-many-arguments
     def __init__(
         self,
         session,
@@ -205,7 +206,8 @@ class Server:
               image_url (optional): image url if available. will not be set if unavailable
 
         Parameters:
-            category: playlists, playlist, albums, album, artists, artist, titles, genres, genre
+            category: one of playlists, playlist, albums, album, artists, artist, titles,
+              genres, genre, favorites
             limit (optional): set maximum number of results
             browse_id (optional): tuple of id type and value
               id type: "album_id", "artist_id", "genre_id", or "track_id"
@@ -237,20 +239,30 @@ class Server:
 
     async def async_get_count(self, category):
         """Return number of category in database."""
-        result = await self.async_query(category, "0", "1", "count")
+        if category == "favorites":
+            command = "favorites items"
+        else:
+            command = category
+        result = await self.async_query(command, "0", "1")
         return result["count"]
 
     async def async_query_category(self, category, limit=None, search=None):
         """Return list of entries in category, optionally filtered by search string."""
+        if category == "favorites":
+            command = "favorites items"
+        else:
+            command = category
+
         if not limit:
             limit = await self.async_get_count(category)
+
         if search and "playlist_id" in search:
             # workaround LMS bug - playlist_id doesn't work for "titles" search
             query = ["playlists", "tracks", "0", f"{limit}", search]
             query.append("tags:ju")
             category = "playlisttracks"
         else:
-            query = [category, "0", f"{limit}", search]
+            query = [command, "0", f"{limit}", search]
 
         if category == "albums":
             query.append("tags:jl")
@@ -263,7 +275,7 @@ class Server:
             return None
 
         try:
-            items = result[f"{category}_loop"]
+            items = result[f"{command}_loop"]
             for item in items:
                 if category != "playlisttracks":
                     item["title"] = item.pop(category[:-1])
