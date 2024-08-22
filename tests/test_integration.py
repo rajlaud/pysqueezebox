@@ -8,6 +8,7 @@ the volume and must leave the player in the same state as they found it in.
 
 PLEASE RESPECT THIS.
 """
+
 import asyncio
 
 import aiohttp
@@ -33,7 +34,7 @@ async def fixture_lms(request):
     https = request.config.option.HTTPS
 
     if ip is None:
-        pytest.fail("No ip address specified. Use the --ip option.")
+        pytest.fail("No ip address specified. Use the --host option.")
 
     async with aiohttp.ClientSession() as session:
         server = Server(session, ip, port, https=https)
@@ -229,6 +230,7 @@ async def test_browse(lms):
         ("artists", "artist_id"),
         ("genres", "genre_id"),
         ("albums", "album_id"),
+        ("favorites", "item_id"),
     ]
 
     for category in categories:
@@ -248,6 +250,7 @@ async def lookup_helper(lms, category, id_type, limit=BROWSE_LIMIT):
     result = await lms.async_browse(
         category[:-1], limit=BROWSE_LIMIT, browse_id=(id_type, browse_id)
     )
+    print(result)
     assert result["title"] == title
 
 

@@ -207,7 +207,7 @@ class Server:
 
         Parameters:
             category: one of playlists, playlist, albums, album, artists, artist, titles,
-              genres, genre, favorites
+              genres, genre, favorites, favorite
             limit (optional): set maximum number of results
             browse_id (optional): tuple of id type and value
               id type: "album_id", "artist_id", "genre_id", or "track_id"
@@ -216,7 +216,10 @@ class Server:
         browse = {}
         search = f"{browse_id[0]}:{browse_id[1]}" if browse_id else None
 
-        if category in ["playlist", "album", "artist", "genre"]:
+        if (
+            category in ["playlist", "album", "artist", "genre", "favorite"]
+            and browse_id
+        ):
             browse["title"] = await self.async_get_category_title(
                 category, browse_id[1]
             )
@@ -239,20 +242,15 @@ class Server:
 
     async def async_get_count(self, category):
         """Return number of category in database."""
+        query = [category]
         if category == "favorites":
-            command = "favorites items"
-        else:
-            command = category
-        result = await self.async_query(command, "0", "1")
+            query.append("items")
+        query.extend(["0", "1"])
+        result = await self.async_query(*query)
         return result["count"]
 
     async def async_query_category(self, category, limit=None, search=None):
         """Return list of entries in category, optionally filtered by search string."""
-        if category == "favorites":
-            command = "favorites items"
-        else:
-            command = category
-
         if not limit:
             limit = await self.async_get_count(category)
 
@@ -262,7 +260,11 @@ class Server:
             query.append("tags:ju")
             category = "playlisttracks"
         else:
-            query = [command, "0", f"{limit}", search]
+            if category in ["favorite", "favorites"]:
+                query = ["favorites", "items"]
+            else:
+                query = [category]
+            query.extend(["0", f"{limit}", search])
 
         if category == "albums":
             query.append("tags:jl")
@@ -270,14 +272,25 @@ class Server:
             query.append("sort:albumtrack")
             query.append("tags:ju")
 
+        if category in ["favorite", "favorites"]:
+            query.append("want_url:1")
+
         result = await self.async_query(*query)
-        if result is None or result.get("count") == 0:
+        if not result or result.get("count") == 0:
             return None
 
         try:
-            items = result[f"{command}_loop"]
+            if category in ["favorite", "favorites"]:
+                items = result["loop_loop"]  # strange, but what LMS returns
+            else:
+                items = result[f"{category}_loop"]
             for item in items:
-                if category != "playlisttracks":
+                if category in ["favorite", "favorites"]:
+                    item["title"] = item.pop("name")
+                    item["id"] = (
+                        item["id"].split(".", 1)[1] if "." in item["id"] else item["id"]
+                    )  # first part is session id
+                elif category not in ["playlisttracks"]:
                     item["title"] = item.pop(category[:-1])
 
                 if category in ["albums", "titles", "playlisttracks"]:
@@ -287,9 +300,12 @@ class Server:
                         )
             return items
 
-        except KeyError:
-            _LOGGER.error("Could not find results loop for category %s", category)
-            _LOGGER.error("Got result %s", result)
+        except KeyError as e:
+            if not items:
+                _LOGGER.error("Could not find results loop for category %s", category)
+                _LOGGER.error("Got result %s", result)
+            else:
+                raise KeyError(e)
 
     async def async_get_category(self, category, limit=None, search=None):
         """Update cache of library category if needed and return result."""
@@ -334,7 +350,7 @@ class Server:
         else:
             self._browse_cache[category] = None
 
-        if limit and result is not None:
+        if limit and result:
             return result[:limit]
         return result
 
@@ -345,7 +361,11 @@ class Server:
         Use the cache because of a bug in how LMS handles this search.
         """
         category_list = await self.async_get_category(f"{category}s")
-        result = next(item for item in category_list if item["id"] == int(browse_id))
+        print(category_list)
+        result = next(
+            (item for item in category_list if str(item["id"]) == str(browse_id)),
+            None,
+        )
         if result:
             return result.get("title")
 
