@@ -258,7 +258,7 @@ class Server:
             # workaround LMS bug - playlist_id doesn't work for "titles" search
             query = ["playlists", "tracks", "0", f"{limit}", search]
             query.append("tags:ju")
-        elif search and "favorite" in search:
+        elif search and "item_id" in search:
             # we have to look up favorites separately
             query = ["favorites", "items", "0", f"{limit}", search]
         else:
