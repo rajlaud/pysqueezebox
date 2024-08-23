@@ -220,9 +220,7 @@ class Server:
             category in ["playlist", "album", "artist", "genre", "favorite"]
             and browse_id
         ):
-            browse["title"] = await self.async_get_category_title(
-                category, browse_id[1]
-            )
+            browse["title"] = await self.async_get_category_title(category, search)
         else:
             browse["title"] = category.title()
 
@@ -292,9 +290,6 @@ class Server:
                     if item["isaudio"] != 1 and item["hasitems"] != 1:
                         continue
                     item["title"] = item.pop("name")
-                    item["id"] = (
-                        item["id"].split(".", 1)[1] if "." in item["id"] else item["id"]
-                    )  # first part is session id
                     if item.get("url", "").startswith("db:album.title"):
                         item["album_id"] = await self.async_get_album_id_from_url(
                             item["url"]
@@ -368,19 +363,13 @@ class Server:
             return result[:limit]
         return result
 
-    async def async_get_category_title(self, category, browse_id):
+    async def async_get_category_title(self, category, search):
         """
         Search of the category name corresponding to a title.
-
-        Use the cache because of a bug in how LMS handles this search.
         """
-        category_list = await self.async_get_category(f"{category}s")
-        result = next(
-            (item for item in category_list if str(item["id"]) == str(browse_id)),
-            None,
-        )
-        if result:
-            return result.get("title")
+        result = await self.async_get_category(f"{category}s", 50, search)
+        if result and len(result) > 0:
+            return result[0].get("title")
 
     async def async_get_album_id_from_url(self, url):
         """Find the album_id from a favorites url."""
