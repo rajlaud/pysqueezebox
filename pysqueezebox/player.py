@@ -1,4 +1,5 @@
 """The pysqueezebox.Player() class."""
+
 import asyncio
 import logging
 import async_timeout

@@ -21,7 +21,7 @@ BROWSE_LIMIT = 50
 # All test coroutines will be treated as marked.
 pytestmark = pytest.mark.asyncio
 
-IP = None
+IP = "192.168.88.3"
 REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
 

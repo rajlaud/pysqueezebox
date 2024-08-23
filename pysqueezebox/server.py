@@ -3,11 +3,11 @@
 import asyncio
 import json
 import logging
+import re
+from urllib.parse import quote, unquote, urljoin
 
 import aiohttp
 import async_timeout
-
-from urllib.parse import quote, unquote, urljoin
 from .const import DEFAULT_PORT, TIMEOUT
 from .player import Player
 
@@ -404,10 +404,11 @@ class Server:
 
     def get_track_id_from_image_url(self, image_url):
         """Get a track id from an image url."""
-        try:
-            return image_url.split("/music/")[1].split("/cover.jpg")[0]
-        except IndexError:
-            return None
+
+        match = re.search(r"^(?:/?)music/([^/]+)/cover.*", image_url)
+        if match:
+            return match.group(1)
+        return None
 
     def generate_image_url(self, image_url):
         """Add the appropriate base_url to a relative image_url."""
