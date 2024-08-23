@@ -13,6 +13,15 @@ from .player import Player
 
 _LOGGER = logging.getLogger(__name__)
 
+BROWSE_ICONS = {
+    "artists": "html/images/artists.png",
+    "albums": "html/images/albums.png",
+    "tracks": "html/images/musicfolder.png",
+    "playlists": "html/images/playlists.png",
+    "genres": "html/images/genres.png",
+    "favorites": "html/images/favorites.png",
+}
+
 
 # pylint: disable=too-many-instance-attributes
 class Server:
@@ -307,6 +316,8 @@ class Server:
                     item["image_url"] = self.generate_image_url_from_track_id(
                         item["artwork_track_id"]
                     )
+                elif "image_url" not in item and category in BROWSE_ICONS:
+                    item["image_url"] = self.generate_image_url(BROWSE_ICONS[category])
             return items
 
         except KeyError:
