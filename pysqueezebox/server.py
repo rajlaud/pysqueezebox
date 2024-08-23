@@ -258,7 +258,9 @@ class Server:
             # workaround LMS bug - playlist_id doesn't work for "titles" search
             query = ["playlists", "tracks", "0", f"{limit}", search]
             query.append("tags:ju")
-            category = "playlisttracks"
+        elif search and "favorite" in search:
+            # we have to look up favorites separately
+            query = ["favorites", "items", "0", f"{limit}", search]
         else:
             if category in ["favorite", "favorites"]:
                 query = ["favorites", "items"]
@@ -266,26 +268,27 @@ class Server:
                 query = [category]
             query.extend(["0", f"{limit}", search])
 
-        if category == "albums":
+        # add command-specific suffixes
+        if query[0] == "albums":
             query.append("tags:jla")
-        elif category == "titles":
+        elif query[0] == "titles":
             query.append("sort:albumtrack")
             query.append("tags:ju")
-
-        if category in ["favorite", "favorites"]:
+        elif query[0] == "favorites":
             query.append("want_url:1")
 
         result = await self.async_query(*query)
         if not result or result.get("count") == 0:
             return None
 
+        items = None
         try:
-            if category in ["favorite", "favorites"]:
+            if query[0] == "favorites":
                 items = result["loop_loop"]  # strange, but what LMS returns
             else:
                 items = result[f"{category}_loop"]
             for item in items:
-                if category in ["favorite", "favorites"]:
+                if query[0] == "favorites":
                     if item["type"] != "audio" and item["hasitems"] != 1:
                         continue
                     item["title"] = item.pop("name")
@@ -302,15 +305,13 @@ class Server:
                             item["image_url"]
                         ):
                             item["artwork_track_id"] = track_id
-
-                elif category not in ["playlisttracks"]:
+                elif query[0] not in ["playlists", "favorites"]:
                     item["title"] = item.pop(category[:-1])
 
-                if category in ["albums", "titles", "playlisttracks"]:
-                    if "artwork_track_id" in item:
-                        item["image_url"] = self.generate_image_url_from_track_id(
-                            item["artwork_track_id"]
-                        )
+                if "artwork_track_id" in item:
+                    item["image_url"] = self.generate_image_url_from_track_id(
+                        item["artwork_track_id"]
+                    )
             return items
 
         except KeyError:
