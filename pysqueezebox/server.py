@@ -307,8 +307,6 @@ class Server:
                     item["image_url"] = self.generate_image_url_from_track_id(
                         item["artwork_track_id"]
                     )
-                elif "image_url" not in item and category in BROWSE_ICONS:
-                    item["image_url"] = self.generate_image_url(BROWSE_ICONS[category])
             return items
 
         except KeyError:
