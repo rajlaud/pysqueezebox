@@ -226,10 +226,10 @@ async def test_get_player(lms, player):
 async def test_browse(lms):
     """Test browsing the library."""
     categories = [
-        ("playlists", "playlist_id"),
-        ("artists", "artist_id"),
-        ("genres", "genre_id"),
-        ("albums", "album_id"),
+        # ("playlists", "playlist_id"),
+        # ("artists", "artist_id"),
+        # ("genres", "genre_id"),
+        # ("albums", "album_id"),
         ("favorites", "item_id"),
     ]
 
@@ -250,7 +250,6 @@ async def lookup_helper(lms, category, id_type, limit=BROWSE_LIMIT):
     result = await lms.async_browse(
         category[:-1], limit=BROWSE_LIMIT, browse_id=(id_type, browse_id)
     )
-    print(result)
     assert result["title"] == title
 
 

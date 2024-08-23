@@ -3,11 +3,11 @@
 import asyncio
 import json
 import logging
-import urllib
 
 import aiohttp
 import async_timeout
 
+from urllib.parse import quote, unquote, urljoin
 from .const import DEFAULT_PORT, TIMEOUT
 from .player import Player
 
@@ -267,7 +267,7 @@ class Server:
             query.extend(["0", f"{limit}", search])
 
         if category == "albums":
-            query.append("tags:jl")
+            query.append("tags:jla")
         elif category == "titles":
             query.append("sort:albumtrack")
             query.append("tags:ju")
@@ -286,10 +286,19 @@ class Server:
                 items = result[f"{category}_loop"]
             for item in items:
                 if category in ["favorite", "favorites"]:
+                    if item["type"] != "audio" and item["hasitems"] != 1:
+                        continue
                     item["title"] = item.pop("name")
                     item["id"] = (
                         item["id"].split(".", 1)[1] if "." in item["id"] else item["id"]
                     )  # first part is session id
+                    if item.get("url", "").startswith("db:album.title"):
+                        item["album_id"] = await self.async_get_album_id_from_url(
+                            item["url"]
+                        )
+                    if "image" in item:
+                        item["image_url"] = self.generate_image_url(item["image"])
+
                 elif category not in ["playlisttracks"]:
                     item["title"] = item.pop(category[:-1])
 
@@ -300,12 +309,12 @@ class Server:
                         )
             return items
 
-        except KeyError as e:
+        except KeyError:
             if not items:
                 _LOGGER.error("Could not find results loop for category %s", category)
                 _LOGGER.error("Got result %s", result)
             else:
-                raise KeyError(e)
+                raise
 
     async def async_get_category(self, category, limit=None, search=None):
         """Update cache of library category if needed and return result."""
@@ -361,13 +370,29 @@ class Server:
         Use the cache because of a bug in how LMS handles this search.
         """
         category_list = await self.async_get_category(f"{category}s")
-        print(category_list)
         result = next(
             (item for item in category_list if str(item["id"]) == str(browse_id)),
             None,
         )
         if result:
             return result.get("title")
+
+    async def async_get_album_id_from_url(self, url):
+        """Find the album_id from a favorites url."""
+        album_seach_string = unquote(url)[15:].split("&contributor.name=")
+        album_title = album_seach_string[0]
+        album_contributor = (
+            album_seach_string[1] if len(album_seach_string) > 1 else None
+        )
+
+        albums = await self.async_get_category("albums")
+        for album in albums:
+            if album["title"] == album_title:
+                if album_contributor:
+                    if album["artist"] == album_contributor:
+                        return album["id"]
+                else:
+                    continue
 
     def generate_image_url_from_track_id(self, track_id):
         """Generate an image url using a track id."""
@@ -377,11 +402,11 @@ class Server:
         """Add the appropriate base_url to a relative image_url."""
         base_url = f"{self._prefix}://"
         if self._username:
-            base_url += urllib.parse.quote(self._username, safe="")
+            base_url += quote(self._username, safe="")
             base_url += ":"
-            base_url += urllib.parse.quote(self._password, safe="")
+            base_url += quote(self._password, safe="")
             base_url += "@"
 
         base_url += f"{self.host}:{self.port}/"
 
-        return urllib.parse.urljoin(base_url, image_url)
+        return urljoin(base_url, image_url)
