@@ -297,7 +297,11 @@ class Server:
                             item["url"]
                         )
                     if "image" in item:
-                        item["image_url"] = self.generate_image_url(item["image"])
+                        item["image_url"] = item.pop("image")
+                        if track_id := self.get_track_id_from_image_url(
+                            item["image_url"]
+                        ):
+                            item["artwork_track_id"] = track_id
 
                 elif category not in ["playlisttracks"]:
                     item["title"] = item.pop(category[:-1])
@@ -397,6 +401,13 @@ class Server:
     def generate_image_url_from_track_id(self, track_id):
         """Generate an image url using a track id."""
         return self.generate_image_url(f"/music/{track_id}/cover.jpg")
+
+    def get_track_id_from_image_url(self, image_url):
+        """Get a track id from an image url."""
+        try:
+            return image_url.split("/music/")[1].split("/cover.jpg")[0]
+        except IndexError:
+            return None
 
     def generate_image_url(self, image_url):
         """Add the appropriate base_url to a relative image_url."""
