@@ -289,7 +289,7 @@ class Server:
                 items = result[f"{category}_loop"]
             for item in items:
                 if query[0] == "favorites":
-                    if item["type"] != "audio" and item["hasitems"] != 1:
+                    if item["isaudio"] != 1 and item["hasitems"] != 1:
                         continue
                     item["title"] = item.pop("name")
                     item["id"] = (
