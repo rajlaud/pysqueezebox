@@ -13,15 +13,6 @@ from .player import Player
 
 _LOGGER = logging.getLogger(__name__)
 
-BROWSE_ICONS = {
-    "artists": "html/images/artists.png",
-    "albums": "html/images/albums.png",
-    "tracks": "html/images/musicfolder.png",
-    "playlists": "html/images/playlists.png",
-    "genres": "html/images/genres.png",
-    "favorites": "html/images/favorites.png",
-}
-
 
 # pylint: disable=too-many-instance-attributes
 class Server:
@@ -304,7 +295,7 @@ class Server:
                             item["url"]
                         )
                     if "image" in item:
-                        item["image_url"] = item.pop("image")
+                        item["image_url"] = self.generate_image_url(item.pop("image"))
                         if track_id := self.get_track_id_from_image_url(
                             item["image_url"]
                         ):
