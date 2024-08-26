@@ -386,7 +386,9 @@ class Server:
                     if album["artist"] == album_contributor:
                         return album["id"]
                 else:
-                    continue
+                    return album["id"]
+            else:
+                continue
 
     def generate_image_url_from_track_id(self, track_id):
         """Generate an image url using a track id."""
