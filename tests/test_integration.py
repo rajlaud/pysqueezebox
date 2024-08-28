@@ -15,7 +15,7 @@ import aiohttp
 import pytest
 from pysqueezebox import Player, Server, async_discover
 
-BROWSE_LIMIT = 50
+BROWSE_LIMIT = 1
 
 # pylint: disable=C0103
 # All test coroutines will be treated as marked.
@@ -231,6 +231,7 @@ async def test_browse(lms):
         ("genres", "genre_id"),
         ("albums", "album_id"),
         ("favorites", "item_id"),
+        ("titles", "title_id"),
     ]
 
     for category in categories:
@@ -251,6 +252,7 @@ async def lookup_helper(lms, category, id_type, limit=BROWSE_LIMIT):
         category[:-1], limit=BROWSE_LIMIT, browse_id=(id_type, browse_id)
     )
     assert result["title"] == title
+    # print(result)
 
 
 def print_properties(player):

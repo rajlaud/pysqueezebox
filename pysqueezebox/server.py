@@ -217,7 +217,7 @@ class Server:
         search = f"{browse_id[0]}:{browse_id[1]}" if browse_id else None
 
         if (
-            category in ["playlist", "album", "artist", "genre", "favorite"]
+            category in ["playlist", "album", "artist", "genre", "title", "favorite"]
             and browse_id
         ):
             browse["title"] = await self.async_get_category_title(category, search)
@@ -252,7 +252,7 @@ class Server:
         if not limit:
             limit = await self.async_get_count(category)
 
-        if search and "playlist_id" in search:
+        if category == "titles" and search and "playlist_id" in search:
             # workaround LMS bug - playlist_id doesn't work for "titles" search
             query = ["playlists", "tracks", "0", f"{limit}", search]
             query.append("tags:ju")
@@ -283,6 +283,8 @@ class Server:
         try:
             if query[0] == "favorites":
                 items = result["loop_loop"]  # strange, but what LMS returns
+            elif category == "titles" and query[0] == "playlists":
+                items = result["playlisttracks_loop"]
             else:
                 items = result[f"{category}_loop"]
             for item in items:
