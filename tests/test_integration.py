@@ -8,6 +8,7 @@ the volume and must leave the player in the same state as they found it in.
 
 PLEASE RESPECT THIS.
 """
+
 import asyncio
 
 import aiohttp
@@ -229,6 +230,7 @@ async def test_browse(lms):
         ("artists", "artist_id"),
         ("genres", "genre_id"),
         ("albums", "album_id"),
+        ("titles", "title_id"),
     ]
 
     for category in categories:
@@ -245,6 +247,8 @@ async def lookup_helper(lms, category, id_type, limit=BROWSE_LIMIT):
     assert len(result["items"]) > 0
     browse_id = result["items"][0].get("id")
     title = result["items"][0].get("title")
+    assert browse_id is not None
+    assert title is not None
     result = await lms.async_browse(
         category[:-1], limit=BROWSE_LIMIT, browse_id=(id_type, browse_id)
     )
