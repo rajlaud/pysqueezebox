@@ -1,4 +1,5 @@
 """The pysqueezebox.Server() class."""
+
 import asyncio
 import json
 import logging
@@ -181,7 +182,7 @@ class Server:
             return False
 
         except (asyncio.TimeoutError, aiohttp.ClientError) as error:
-            _LOGGER.error("Failed communicating with LMS(%s): %s", url , type(error))
+            _LOGGER.error("Failed communicating with LMS(%s): %s", url, type(error))
             return False
 
         try:
@@ -221,7 +222,7 @@ class Server:
         else:
             browse["title"] = category.title()
 
-        if category in ["playlist", "album"]:
+        if category in ["playlist", "album", "title"]:
             item_type = "titles"
         elif category in ["genre"]:
             item_type = "artists"
@@ -233,6 +234,8 @@ class Server:
         items = await self.async_get_category(item_type, limit, search)
 
         browse["items"] = items
+        if category == "title" and len(items) > 0:
+            browse["title"] = items[0]["title"]
         return browse
 
     async def async_get_count(self, category):
@@ -259,7 +262,7 @@ class Server:
             query.append("tags:ju")
 
         result = await self.async_query(*query)
-        if result is None or result.get("count") == 0:
+        if not result or result.get("count") == 0:
             return None
 
         try:
