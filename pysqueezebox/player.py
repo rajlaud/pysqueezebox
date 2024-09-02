@@ -679,7 +679,7 @@ class Player:
         """
 
         parlist = [f'{key}:{value}' for key, value in params.items()
-                   if key in [ 'time', 'dow', 'enabled', 'repeat', 'shufflemode', 'volume', 'url' ]
+                   if key in [ 'time', 'dow', 'enabled', 'repeat', 'volume', 'url' ]
                    ]
         parlist.append(f'id:{id}')
         response = await self.async_query("alarm", "update", *parlist)
