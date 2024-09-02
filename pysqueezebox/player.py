@@ -1,4 +1,5 @@
 """The pysqueezebox.Player() class."""
+
 import asyncio
 import logging
 import async_timeout
@@ -269,6 +270,11 @@ class Player:
         return self._status.get("playlist_loop")
 
     @property
+    def alarms(self):
+        """Return the list of alarms."""
+        return self._status.get("alarms_loop")
+
+    @property
     def playlist_urls(self):
         """Return only the urls of the current playlist. Useful for comparing playlists."""
         if not self.playlist:
@@ -342,6 +348,7 @@ class Player:
     async def async_update(self, add_tags=None):
         """
         Update the current state of the player.
+        Also updates the list of alarms set for this player.
 
         Return True if successful, False if update fails.
         """
@@ -382,6 +389,18 @@ class Player:
         # preserve the playlist between updates
         self._status = {"playlist_loop": self._status.get("playlist_loop")}
         self._status.update(response)
+
+        # read alarm clock data
+        # it seems, unlike playlist length, there's no way to know beforehand how many there are, so we just do 99
+        response = await self.async_query("alarms", "0", "99", "filter:all")
+        if response is False:
+            _LOGGER.debug('Did not receive alarm data')
+            return False
+
+        if (response["count"] > 0):
+            self._status.update({"alarms_loop": response["alarms_loop"]})
+        else:
+            self._status.update({"alarms_loop": None })
 
         # check if any property futures have been satisfied
         property_futures = []
@@ -584,6 +603,118 @@ class Player:
             if not await self.async_load_url(item["url"], "add"):
                 success = False
         return success
+
+    async def async_add_alarm(self, *, time, **params):
+        """
+        Creates a new alarm clock on this player.
+        Follows the description on http(s)://<server>:<port>/html/docs/cli-api.html?player=#alarm
+
+        Parameters
+        ----------
+        time : int
+            Mandatory `time` of alarm in seconds from midnight
+        dow : str
+            Day Of Week. 0 is Sunday, 1 is Monday, etc. up to 6 being Saturday.
+            You can define a group of days by concatenating them with "," as separator.
+            Default: 0-6.
+        enabled : { 0, 1 }
+            Set to 1 to enable, 0 to disable alarm
+            Default: 0
+        repeat : { 0, 1 }
+            Set to 1 to make this a repeated alarm, 0 otherwise.
+            Default: 1
+        volume : int
+            Volume for this alarm, valid values are 0-100, defaults to default alarm volume
+        url: str
+            URL for the alarm playlist, defaults to current playlist
+
+        Returns
+        -------
+        id: str
+            ID of newly created alarm, None if not successfull
+        """
+
+        parlist = [f'{key}:{value}' for key, value in params.items()
+                   if key in [ 'dow', 'enabled', 'repeat', 'volume', 'url' ]
+        ]
+        parlist.append(f'time:{time}')
+        response = await self.async_query("alarm", "add", *parlist)
+        if response is False:
+            _LOGGER.debug(f'alarm with params {parlist} could not be added')
+            return None
+        else:
+            _LOGGER.debug(f'response when adding alarm: {response}')
+            return response['id']
+
+    async def async_update_alarm(self, *, id, **params):
+        """
+        Updates an existing alarm clock
+        Follows the description on http(s)://<server>:<port>/html/docs/cli-api.html?player=#alarm
+
+        Parameters
+        ----------
+        id : str
+            Mandatory id of the alarm to update
+        time : int
+            `time` of alarm in seconds from midnight
+        dow : str
+            Day Of Week. 0 is Sunday, 1 is Monday, etc. up to 6 being Saturday.
+            You can define a group of days by concatenating them with "," as separator.
+            Default: 0-6.
+        enabled : { 0, 1 }
+            Set to 1 to enable, 0 to disable alarm
+            Default: 0
+        repeat : { 0, 1 }
+            Set to 1 to make this a repeated alarm, 0 otherwise.
+            Default: 1
+        volume : int
+            Volume for this alarm, valid values are 0-100, defaults to default alarm volume
+        url: str
+            URL for the alarm playlist, defaults to current playlist
+
+        Returns
+        -------
+        id: str
+            ID of updated alarm, None if not successful
+        """
+
+        parlist = [f'{key}:{value}' for key, value in params.items()
+                   if key in [ 'time', 'dow', 'enabled', 'repeat', 'shufflemode', 'volume', 'url' ]
+                   ]
+        parlist.append(f'id:{id}')
+        response = await self.async_query("alarm", "update", *parlist)
+        if response is False:
+            _LOGGER.debug(f'alarm with id {id} could not be updated')
+            return False
+        else:
+            _LOGGER.debug(f'response when updating alarm: {response}')
+            return response['id']
+
+    async def async_delete_alarm(self, id):
+        """
+        Deletes an existing alarm clock
+        Follows the description on http(s)://<server>:<port>/html/docs/cli-api.html?player=#alarm
+
+        Parameters
+        ----------
+        id : str
+            Mandatory id of the alarm to delete
+
+        Returns
+        -------
+        id: bool
+            True if successful, False otherwise
+
+        """
+        """
+        Doc parameters
+        """
+        response = await self.async_query("alarm", "delete", f"id:{id}" )
+        if response is False:
+            _LOGGER.debug(f'alarm with id {id} could not be deleted')
+            return False
+        return True
+
 
     async def async_set_shuffle(self, shuffle, timeout=TIMEOUT):
         """Enable/disable shuffle mode."""
