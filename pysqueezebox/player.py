@@ -1,4 +1,5 @@
 """The pysqueezebox.Player() class."""
+
 import asyncio
 import logging
 import async_timeout
@@ -18,7 +19,7 @@ POLL_INTERVAL = 0.75
 class Player:
     """Representation of a SqueezeBox device."""
 
-    def __init__(self, lms, player_id, name, status=None):
+    def __init__(self, lms, player_id, name, status=None, model=None):
         """
         Initialize the SqueezeBox device.
 
@@ -34,6 +35,7 @@ class Player:
         self._playlist_timestamp = 0
         self._playlist_tags = None
         self._name = name
+        self._model = model
 
         self._property_futures = []
         self._poll = None
@@ -53,6 +55,11 @@ class Player:
     def player_id(self):
         """Return the player ID, which is its MAC address."""
         return self._id
+
+    @property
+    def model(self):
+        """Return the players model name, e.g. Squeezebox Boom"""
+        return self._model
 
     @property
     def connected(self):
