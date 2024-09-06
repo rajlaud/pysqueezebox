@@ -58,7 +58,7 @@ class Player:
 
     @property
     def model(self):
-        """Return the player models name, e.g. Squeezebox Boom"""
+        """Return the players model name, e.g. Squeezebox Boom"""
         return self._model
 
     @property
