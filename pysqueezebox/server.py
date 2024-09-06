@@ -88,9 +88,23 @@ class Server:
         for player in data.get("players_loop", []):
             if search:
                 if search.lower() in player["name"].lower():
-                    players.append(Player(self, player["playerid"], player["name"]))
+                    players.append(
+                        Player(
+                            self,
+                            player["playerid"],
+                            player["name"],
+                            model=player.get("modelname", None),
+                        )
+                    )
             else:
-                players.append(Player(self, player["playerid"], player["name"]))
+                players.append(
+                    Player(
+                        self,
+                        player["playerid"],
+                        player["name"],
+                        model=player.get("modelname", None),
+                    )
+                )
         _LOGGER.debug("get_players(%s) returning players: %s", search, players)
         return players
 
