@@ -4,6 +4,8 @@ import asyncio
 import logging
 import async_timeout
 
+from datetime import time as dt_time
+
 from .const import REPEAT_MODE, SHUFFLE_MODE
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,6 +18,27 @@ POLL_INTERVAL = 0.75
 
 
 # pylint: disable=too-many-public-methods
+
+
+def _parse_alarm_params(params):
+    """Take typed inputs and convert them to strings suitable for LMS."""
+    for key, value in params.items():
+        parlist = []
+        if key in ["enabled", "repeat"]:  # booleans
+            parlist.append(f"{key}:{'1' if value else '0'}")
+        elif key == "dow":  # list of ints to comma separated string
+            parlist.append(f"{key}:{','.join([str(day) for day in value])}")
+        elif key == "time":  # time to seconds
+            parlist.append(
+                f"{key}:{str(value.second + value.minute * 60 + value.hour * 3600)}"
+            )
+        elif key in ["url", "volume"]:
+            parlist.append(f"{key}:{str(value)}")
+        else:
+            raise ValueError(f"Unknown parameter {key} with value {value} in alarm")
+    return parlist
+
+
 class Player:
     """Representation of a SqueezeBox device."""
 
@@ -397,16 +420,30 @@ class Player:
         self._status.update(response)
 
         # read alarm clock data
-        # it seems, unlike playlist length, there's no way to know beforehand how many there are, so we just do 99
+        # it seems, unlike playlist length, there's no way to know beforehand how many there are
+        # we just do 99
         response = await self.async_query("alarms", "0", "99", "filter:all")
         if response is False:
-            _LOGGER.debug('Did not receive alarm data')
+            _LOGGER.debug("Did not receive alarm data")
             return False
 
-        if (response["count"] > 0):
+        if response["count"] > 0:
+            # convert string responses to appropriate types
+            for item in response["alarms_loop"]:
+                seconds = int(item["time"])
+                item["time"] = dt_time(
+                    hour=seconds // 3600,
+                    minute=(seconds % 3600) // 60,
+                    second=seconds % 60,
+                )
+                item["enabled"] = item["enabled"] == "1"
+                item["repeat"] = item["repeat"] == "1"
+                item["volume"] = int(item["volume"])
+                item["dow"] = item["dow"].split(",")
+                item["dow"] = [int(day) for day in item["dow"]]
             self._status.update({"alarms_loop": response["alarms_loop"]})
         else:
-            self._status.update({"alarms_loop": None })
+            self._status.update({"alarms_loop": None})
 
         # check if any property futures have been satisfied
         property_futures = []
@@ -623,12 +660,11 @@ class Player:
             Day Of Week. 0 is Sunday, 1 is Monday, etc. up to 6 being Saturday.
             You can define a group of days by concatenating them with "," as separator.
             Default: 0-6.
-        enabled : { 0, 1 }
-            Set to 1 to enable, 0 to disable alarm
-            Default: 0
-        repeat : { 0, 1 }
-            Set to 1 to make this a repeated alarm, 0 otherwise.
-            Default: 1
+        enabled : bool
+            Default: False
+        repeat : bool
+            Set to True to make this a repeated alarm, False otherwise.
+            Default: True
         volume : int
             Volume for this alarm, valid values are 0-100, defaults to default alarm volume
         url: str
@@ -636,43 +672,39 @@ class Player:
 
         Returns
         -------
-        id: str
+        alarm_id: str
             ID of newly created alarm, None if not successfull
         """
 
-        parlist = [f'{key}:{value}' for key, value in params.items()
-                   if key in [ 'dow', 'enabled', 'repeat', 'volume', 'url' ]
-        ]
-        parlist.append(f'time:{time}')
+        params["time"] = time
+        parlist = _parse_alarm_params(params)
         response = await self.async_query("alarm", "add", *parlist)
         if response is False:
-            _LOGGER.debug(f'alarm with params {parlist} could not be added')
+            _LOGGER.debug("Alarm with params %s could not be added", parlist)
             return None
         else:
-            _LOGGER.debug(f'response when adding alarm: {response}')
-            return response['id']
+            _LOGGER.debug("Response when adding alarm: %s", response)
+            return response["id"]
 
-    async def async_update_alarm(self, *, id, **params):
+    async def async_update_alarm(self, alarm_id, **params):
         """
         Updates an existing alarm clock
         Follows the description on http(s)://<server>:<port>/html/docs/cli-api.html?player=#alarm
 
         Parameters
         ----------
-        id : str
+        alarm_id : str
             Mandatory id of the alarm to update
-        time : int
-            `time` of alarm in seconds from midnight
-        dow : str
+        time : datetime.time
+            `time` of alarm
+        dow : list of ints
             Day Of Week. 0 is Sunday, 1 is Monday, etc. up to 6 being Saturday.
-            You can define a group of days by concatenating them with "," as separator.
-            Default: 0-6.
-        enabled : { 0, 1 }
-            Set to 1 to enable, 0 to disable alarm
-            Default: 0
-        repeat : { 0, 1 }
-            Set to 1 to make this a repeated alarm, 0 otherwise.
-            Default: 1
+            Default: [0, 1, 2, 3, 4, 5, 6].
+        enabled : bool
+            Default: False
+        repeat : bool
+            True if this is a repeated alarm, False if it runs only one time.
+            Default: True
         volume : int
             Volume for this alarm, valid values are 0-100, defaults to default alarm volume
         url: str
@@ -680,47 +712,41 @@ class Player:
 
         Returns
         -------
-        id: str
+        alarm_id: str
             ID of updated alarm, None if not successful
         """
 
-        parlist = [f'{key}:{value}' for key, value in params.items()
-                   if key in [ 'time', 'dow', 'enabled', 'repeat', 'volume', 'url' ]
-                   ]
-        parlist.append(f'id:{id}')
+        parlist = _parse_alarm_params(params)
+        parlist.append(f"id:{alarm_id}")
         response = await self.async_query("alarm", "update", *parlist)
         if response is False:
-            _LOGGER.debug(f'alarm with id {id} could not be updated')
+            _LOGGER.debug("Alarm with id %s could not be updated", alarm_id)
             return False
         else:
-            _LOGGER.debug(f'response when updating alarm: {response}')
-            return response['id']
+            _LOGGER.debug("Response when updating alarm: %s", alarm_id)
+            return response["id"]
 
-    async def async_delete_alarm(self, id):
+    async def async_delete_alarm(self, alarm_id):
         """
         Deletes an existing alarm clock
         Follows the description on http(s)://<server>:<port>/html/docs/cli-api.html?player=#alarm
 
         Parameters
         ----------
-        id : str
+        alarm_id : str
             Mandatory id of the alarm to delete
 
         Returns
         -------
-        id: bool
+        bool
             True if successful, False otherwise
 
         """
-        """
-        Doc parameters
-        """
-        response = await self.async_query("alarm", "delete", f"id:{id}" )
+        response = await self.async_query("alarm", "delete", f"id:{alarm_id}")
         if response is False:
-            _LOGGER.debug(f'alarm with id {id} could not be deleted')
+            _LOGGER.debug("Alarm with id %s could not be deleted", alarm_id)
             return False
         return True
-
 
     async def async_set_shuffle(self, shuffle, timeout=TIMEOUT):
         """Enable/disable shuffle mode."""

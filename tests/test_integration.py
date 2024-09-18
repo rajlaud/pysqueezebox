@@ -13,6 +13,7 @@ import asyncio
 
 import aiohttp
 import pytest
+from datetime import time as dt_time
 from pysqueezebox import Player, Server, async_discover
 
 BROWSE_LIMIT = 50
@@ -82,6 +83,7 @@ async def save_player_state(test_player):
     state["time"] = test_player.time
     state["playlist"] = test_player.playlist.copy() if test_player.playlist else None
     state["sync_group"] = test_player.sync_group
+    state["alarms"] = test_player.alarms
     return state
 
 
@@ -98,6 +100,15 @@ async def restore_player_state(test_player, state):
         await test_player.async_sync(other_player)
     if state["mode"] == "play":
         await test_player.async_play()
+    if state["alarms"]:
+        for alarm in state["alarms"]:
+            await test_player.async_add_alarm(
+                time=alarm["time"],
+                enabled=alarm["enabled"],
+                repeat=alarm["repeat"],
+                url=alarm["url"],
+                dow=alarm["dow"],
+            )
 
 
 @pytest.fixture(name="player", scope="module")
@@ -108,6 +119,10 @@ async def fixture_player(players):
     test_player = players[0]
     assert isinstance(test_player, Player)
     state = await save_player_state(test_player)
+
+    if test_player.alarms:
+        for alarm in test_player.alarms:
+            await test_player.async_delete_alarm(alarm["id"])
 
     assert state["playlist"]  # we can't test play, pause, etc. on an empty playlist
 
@@ -541,3 +556,27 @@ async def test_player_sync(player, other_player, broken_player):
     assert not await broken_player.async_unsync()
     with pytest.raises(RuntimeError):
         assert await player.async_sync(None)
+
+
+async def test_alarms(player):
+    """Test alarms."""
+    assert player.alarms is None
+
+    time = dt_time(hour=12, minute=30, second=0)
+    alarm_id = await player.async_add_alarm(time=time)
+    await player.async_update()
+    assert player.alarms is not None
+    assert len(player.alarms) == 1
+    assert player.alarms[0]["time"] == time
+    assert player.alarms[0]["enabled"] is False
+    assert player.alarms[0]["id"] == alarm_id
+
+    await player.async_update_alarm(alarm_id, enabled=True)
+    await player.async_update()
+    assert player.alarms is not None
+    assert len(player.alarms) == 1
+    assert player.alarms[0]["enabled"] is True
+
+    await player.async_delete_alarm(alarm_id)
+    await player.async_update()
+    assert player.alarms is None
