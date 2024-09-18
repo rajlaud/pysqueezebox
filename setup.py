@@ -5,7 +5,7 @@ with open("README.md") as fh:
 
 setuptools.setup(
     name="pysqueezebox",
-    version="0.7.1",
+    version="0.8.2",
     license="apache-2.0",
     author="Raj Laud",
     author_email="raj.laud@gmail.com",
@@ -13,7 +13,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/rajlaud/pysqueezebox",
-    packages=setuptools.find_packages(exclude=['tests','tests.*']),
+    packages=setuptools.find_packages(exclude=["tests", "tests.*"]),
     python_requires=">=3.6",
     install_requires=["aiohttp", "async-timeout"],
 )
