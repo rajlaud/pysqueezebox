@@ -1,4 +1,5 @@
 """Common functions and fixtures for pysqueezebox tests."""
+
 import asyncio
 
 import pytest
@@ -65,5 +66,7 @@ def pytest_addoption(parser):
 
 def pytest_runtest_setup(item):
     """Skip tests marked 'integration' unless an ip address is given."""
-    if "integration" in item.keywords and not item.config.getoption("--ip"):
-        pytest.skip("use --ip and an ip address to run integration tests.")
+    if "integration" in item.keywords and not item.config.getoption("--host"):
+        pytest.skip(
+            "use --host and a hostname or an ip address to run integration tests."
+        )

@@ -265,7 +265,7 @@ def print_properties(player):
 
 async def test_add_tags(player, broken_player):
     """Tests adding a tag to async_update."""
-    await player.async_query("playlist", "loadtracks", "track.titlesearch=purple")
+    await player.async_query("playlist", "loadtracks", "track.titlesearch=blackbird")
     assert await player.async_update(add_tags="D")
     assert not player.remote  # needs a local track for addedTime to have a value
     assert player.current_track.get("addedTime")
