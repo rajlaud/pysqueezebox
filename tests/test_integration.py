@@ -22,7 +22,7 @@ BROWSE_LIMIT = 50
 # All test coroutines will be treated as marked.
 pytestmark = pytest.mark.asyncio
 
-IP = "boat-pi.internal"
+IP = None
 REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
 
@@ -268,6 +268,13 @@ async def lookup_helper(lms, category, id_type, limit=BROWSE_LIMIT):
         category[:-1], limit=BROWSE_LIMIT, browse_id=(id_type, browse_id)
     )
     assert result["title"] == title
+    assert result["items"] is not None
+    for item in result["items"]:
+        assert item.get("id") is not None
+        assert item.get("title") is not None
+        assert item.get("artwork_track_id") is None or isinstance(
+            item["artwork_track_id"], str
+        )
 
 
 def print_properties(player):
