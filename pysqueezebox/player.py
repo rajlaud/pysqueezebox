@@ -1,12 +1,15 @@
 """The pysqueezebox.Player() class."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
+from datetime import time as dt_time
+from typing import Any, Callable, TypedDict, Unpack, TYPE_CHECKING
+
 import async_timeout
 
-from datetime import time as dt_time
-
-from .const import REPEAT_MODE, SHUFFLE_MODE
+from .const import REPEAT_MODE, SHUFFLE_MODE, QueryResult
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -16,33 +19,81 @@ TIMEOUT = 5
 # how quickly to poll server waiting for command to reach player
 POLL_INTERVAL = 0.75
 
+# type for status query responses
+PlayerStatus = TypedDict(
+    "PlayerStatus",
+    {
+        "player_connected": int,
+        "power": int,
+        "mode": str,
+        "mixer volume": str,
+        "current_title": str,
+        "time": int,
+        "remote": int,
+        "remote_title": str,
+        "playlist_cur_index": str,
+        "playlist_loop": list[dict[str, str]] | None,
+        "remoteMeta": dict[str, str],
+        "playlist_timestamp": str,
+        "playlist_tracks": str,
+        "playlist shuffle": int,
+        "playlist repeat": int,
+        "samplerate": str,
+        "samplesize": str,
+        "sync_master": str,
+        "sync_slaves": str,
+        "alarms_loop": list[dict[str, str]] | None,
+    },
+    total=False,
+)
+
+if TYPE_CHECKING:
+    from .server import Server
+
 
 # pylint: disable=too-many-public-methods
 
 
-def _parse_alarm_params(params):
+class AlarmParams(TypedDict, total=False):
+    """Parameters for an alarm."""
+
+    time: dt_time
+    dow: list[int]
+    enabled: bool
+    repeat: bool
+    volume: int | None
+    url: str | None
+
+
+def _parse_alarm_params(params: AlarmParams) -> list[str]:
     """Take typed inputs and convert them to strings suitable for LMS."""
+    parlist = []
+
     for key, value in params.items():
-        parlist = []
-        if key in ["enabled", "repeat"]:  # booleans
+        if key == "time":
+            value = params["time"]  # make mypy understand the type of value
+            parlist.append(f"{key}:{value.hour*3600 + value.minute*60 + value.second}")
+        if key == "dow":
+            value = params["dow"]  # make mypy understand the type of value
+            parlist.append(f"{key}:{','.join(map(str, value))}")
+        if key in ["enabled", "repeat"]:
             parlist.append(f"{key}:{'1' if value else '0'}")
-        elif key == "dow":  # list of ints to comma separated string
-            parlist.append(f"{key}:{','.join([str(day) for day in value])}")
-        elif key == "time":  # time to seconds
-            parlist.append(
-                f"{key}:{str(value.second + value.minute * 60 + value.hour * 3600)}"
-            )
-        elif key in ["url", "volume"]:
-            parlist.append(f"{key}:{str(value)}")
-        else:
-            raise ValueError(f"Unknown parameter {key} with value {value} in alarm")
+        if key in ["volume", "url"]:
+            parlist.append(f"{key}:{value}")
     return parlist
 
 
 class Player:
     """Representation of a SqueezeBox device."""
 
-    def __init__(self, lms, player_id, name, status=None, model=None):
+    def __init__(
+        self,
+        lms: Server,
+        player_id: str,
+        name: str,
+        status: PlayerStatus | None = None,
+        model: str | None = None,
+    ):
         """
         Initialize the SqueezeBox device.
 
@@ -51,41 +102,42 @@ class Player:
             player_id: the unique identifier for the player (required)
             name: the player's name (required)
             status: status dictionary for player (optional)
+            model: the player's model name (optional)
         """
         self._lms = lms
         self._id = player_id
         self._status = status if status else {}
         self._playlist_timestamp = 0
-        self._playlist_tags = None
+        self._playlist_tags: set[str] = set()
         self._name = name
         self._model = model
 
-        self._property_futures = []
-        self._poll = None
+        self._property_futures: list[dict[str, Any]] = []
+        self._poll: asyncio.Task[Any] | None = None
 
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return representation of Player object."""
         return f"Player('{self._lms}', '{self._id}', '{self._name}', {self._status})"
 
     @property
-    def name(self):
+    def name(self) -> str:
         """Return the name of the device."""
         return self._name
 
     @property
-    def player_id(self):
+    def player_id(self) -> str:
         """Return the player ID, which is its MAC address."""
         return self._id
 
     @property
-    def model(self):
+    def model(self) -> str | None:
         """Return the players model name, e.g. Squeezebox Boom"""
         return self._model
 
     @property
-    def connected(self):
+    def connected(self) -> bool:
         """
         Return True if the player is connected to the LMS server.
 
@@ -99,19 +151,19 @@ class Player:
         return False
 
     @property
-    def power(self):
+    def power(self) -> bool | None:
         """Return the power state of the device."""
         if "power" in self._status:
             return self._status["power"] == 1
         return None
 
     @property
-    def mode(self):
+    def mode(self) -> str | None:
         """Return the mode of the device. One of play, stop, or pause."""
         return self._status.get("mode")
 
     @property
-    def volume(self):
+    def volume(self) -> int | None:
         """
         Return volume level of the Player.
 
@@ -126,31 +178,31 @@ class Player:
         return None
 
     @property
-    def muting(self):
+    def muting(self) -> bool:
         """Return true if volume is muted."""
         if "mixer volume" in self._status:
             return str(self._status["mixer volume"]).startswith("-")
         return False
 
     @property
-    def current_title(self):
+    def current_title(self) -> str | None:
         """Return title of current playing media on remote stream."""
         return self._status.get("current_title")
 
     @property
-    def duration(self):
+    def duration(self) -> int | None:
         """Return duration of current playing media in seconds."""
         return int(self.duration_float) if self.duration_float else None
 
     @property
-    def duration_float(self):
+    def duration_float(self) -> float | None:
         """Return duration of current playing media in floating point seconds."""
         if self.current_track and "duration" in self.current_track:
             return float(self.current_track["duration"])
         return None
 
     @property
-    def time(self):
+    def time(self) -> int | None:
         """
         Return position of current playing media in seconds.
 
@@ -159,7 +211,7 @@ class Player:
         return int(self.time_float) if self.time_float else None
 
     @property
-    def time_float(self):
+    def time_float(self) -> float | None:
         """
         Return position of current playing media in floating point seconds.
 
@@ -170,7 +222,7 @@ class Player:
         return None
 
     @property
-    def image_url(self):
+    def image_url(self) -> str:
         """Return image url of current playing media."""
         if self.current_track and "artwork_url" in self.current_track:
             # we're playing a remote stream with an artwork url
@@ -189,14 +241,14 @@ class Player:
         return self._lms.generate_image_url("/music/unknown/cover.jpg")
 
     @property
-    def current_index(self):
+    def current_index(self) -> int | None:
         """Return the current index in the playlist."""
         if "playlist_cur_index" in self._status:
             return int(self._status["playlist_cur_index"])
         return None
 
     @property
-    def current_track(self):
+    def current_track(self) -> dict[str, str] | None:
         """Return playlist_loop or remoteMeta dictionary for current track."""
         try:
             return self._status["remoteMeta"]
@@ -210,130 +262,135 @@ class Player:
         return None
 
     @property
-    def remote(self):
+    def remote(self) -> bool:
         """Return true if current media is a remote stream."""
         if "remote" in self._status:
             return self._status["remote"] == 1
-        return None
+        return False
 
     @property
-    def remote_title(self):
+    def remote_title(self) -> str | None:
         """Return title of current playing media on remote stream."""
         if self.current_track and "remote_title" in self.current_track:
             return self.current_track.get("remote_title")
         return None
 
     @property
-    def title(self):
+    def title(self) -> str | None:
         """Return title of current playing media."""
         if self.current_track:
             return self.current_track.get("title")
         return None
 
     @property
-    def artist(self):
+    def artist(self) -> str | None:
         """Return artist of current playing media."""
         if self.current_track:
             return self.current_track.get("artist")
         return None
 
     @property
-    def album(self):
+    def album(self) -> str | None:
         """Return album of current playing media."""
         if self.current_track:
             return self.current_track.get("album")
         return None
 
     @property
-    def content_type(self):
+    def content_type(self) -> str | None:
         """Return content type of current playing media."""
         if self.current_track:
             return self.current_track.get("type")
         return None
 
     @property
-    def bitrate(self):
-        """Return bit rate of current playing media."""
+    def bitrate(self) -> str | None:
+        """Return bit rate of current playing media as a string including units."""
         if self.current_track:
             return self.current_track.get("bitrate")
         return None
 
     @property
-    def samplerate(self):
-        """Return sample rate of current playing media."""
+    def samplerate(self) -> int | None:
+        """Return sample rate of current playing media in KHz, if known."""
         if self.current_track:
-            return self.current_track.get("samplerate")
+            samplerate = self.current_track.get("samplerate")
+            return int(samplerate) if samplerate else None
         return None
 
     @property
-    def samplesize(self):
-        """Return sample size of current playing media."""
-        if self.current_track:
-            return self.current_track.get("samplesize")
+    def samplesize(self) -> int | None:
+        """Return sample size of current playing media in bits."""
+        if self.current_track and "samplesize" in self.current_track:
+            samplesize = self.current_track.get("samplesize")
+            return int(samplesize) if samplesize else None
         return None
 
     @property
-    def shuffle(self):
+    def shuffle(self) -> str | None:
         """Return shuffle mode. May be 'none, 'song', or 'album'."""
         if "playlist shuffle" in self._status:
             return SHUFFLE_MODE[self._status["playlist shuffle"]]
         return None
 
     @property
-    def repeat(self):
+    def repeat(self) -> str | None:
         """Return repeat mode. May be 'none', 'song', or 'playlist'."""
         if "playlist repeat" in self._status:
             return REPEAT_MODE[self._status["playlist repeat"]]
         return None
 
     @property
-    def url(self):
+    def url(self) -> str | None:
         """Return the url for the currently playing media."""
         if self.current_track:
             return self.current_track.get("url")
         return None
 
     @property
-    def playlist(self):
+    def playlist(self) -> list[dict[str, str]] | None:
         """Return the current playlist."""
         return self._status.get("playlist_loop")
 
     @property
-    def alarms(self):
+    def alarms(self) -> list[dict[str, str]] | None:
         """Return the list of alarms."""
         return self._status.get("alarms_loop")
 
     @property
-    def playlist_urls(self):
+    def playlist_urls(self) -> list[dict[str, str]] | None:
         """Return only the urls of the current playlist. Useful for comparing playlists."""
         if not self.playlist:
             return None
         return [{"url": item["url"]} for item in self.playlist]
 
     @property
-    def playlist_tracks(self):
+    def playlist_tracks(self) -> int | None:
         """Return the current playlist length."""
-        return self._status.get("playlist_tracks")
+        if "playlist_tracks" in self._status:
+            return int(self._status["playlist_tracks"])
+        return None
 
     @property
-    def synced(self):
+    def synced(self) -> bool:
         """Return true if currently synced."""
-        return self._status.get("sync_master")
+        return self._status.get("sync_master") is not None
 
     @property
-    def sync_master(self):
+    def sync_master(self) -> str | None:
         """Return the player id of the sync group master."""
         return self._status.get("sync_master")
 
     @property
-    def sync_slaves(self):
+    def sync_slaves(self) -> list[str] | None:
         """Return the player ids of the sync group slaves."""
-        if self._status.get("sync_slaves"):
-            return self._status.get("sync_slaves").split(",")
+        sync_slaves = self._status.get("sync_slaves")
+        if sync_slaves is not None:
+            return sync_slaves.split(",")
         return None
 
     @property
-    def sync_group(self):
+    def sync_group(self) -> list[str] | None:
         """Return the player ids of all players in current sync group."""
         sync_group = []
         if self.sync_slaves:
@@ -342,7 +399,12 @@ class Player:
             sync_group.append(self.sync_master)
         return sync_group
 
-    def create_property_future(self, prop, test, interval=POLL_INTERVAL):
+    def create_property_future(
+        self,
+        prop: str,
+        test: Callable[[Any], bool],
+        interval: float | None = POLL_INTERVAL,
+    ) -> asyncio.Future[bool]:
         """
         Create a future awaiting a property value.
 
@@ -359,22 +421,29 @@ class Player:
         loop.create_task(self.async_update())
         return future
 
-    async def _wait_for_property(self, prop, value, timeout):
+    async def _wait_for_property(self, prop: str, value: Any, timeout: float) -> bool:
         """Wait for property to hit certain state or timeout."""
         if timeout == 0:
             return True
         try:
             async with async_timeout.timeout(timeout):
-                return await self.create_property_future(prop, lambda x: value == x)
+                await self.create_property_future(prop, lambda x: value == x)
+                return True
         except asyncio.TimeoutError:
-            _LOGGER.error("Timed out waiting for %s to have value %s", prop, value)
+            _LOGGER.error(
+                "Timed out (%s) waiting for %s to have value %s", timeout, prop, value
+            )
             return False
 
-    async def async_query(self, *parameters):
+    async def async_command(self, *parameters: str) -> bool:
+        """Send a command to the player."""
+        return await self._lms.async_command(*parameters, player=self._id)
+
+    async def async_query(self, *parameters: str) -> dict[str, Any] | None:
         """Return result of a query specific to this player."""
         return await self._lms.async_query(*parameters, player=self._id)
 
-    async def async_update(self, add_tags=None):
+    async def async_update(self, add_tags: str | None = None) -> bool:
         """
         Update the current state of the player.
         Also updates the list of alarms set for this player.
@@ -390,12 +459,13 @@ class Player:
             tags = "".join(set(tags + add_tags))
         response = await self.async_query("status", "-", "1", f"tags:{tags}")
 
-        if response is False:
+        if response is None:
             return False
 
         if "playlist_timestamp" in response and "playlist_tracks" in response:
+            playlist_timestamp = int(response["playlist_timestamp"])
             if (
-                response["playlist_timestamp"] > self._playlist_timestamp
+                playlist_timestamp > self._playlist_timestamp
                 or set(tags) > self._playlist_tags
             ):
                 self._playlist_timestamp = response["playlist_timestamp"]
@@ -406,7 +476,7 @@ class Player:
                     "status", "0", response["playlist_tracks"], f"tags:{tags}"
                 )
 
-                if response is False:
+                if response is None:
                     _LOGGER.debug("Error updating status - unable to retrieve playlist")
                     return False
             else:
@@ -417,13 +487,15 @@ class Player:
 
         # preserve the playlist between updates
         self._status = {"playlist_loop": self._status.get("playlist_loop")}
-        self._status.update(response)
+
+        # todo: validate response
+        self._status.update(response)  # type: ignore
 
         # read alarm clock data
         # it seems, unlike playlist length, there's no way to know beforehand how many there are
         # we just do 99
         response = await self.async_query("alarms", "0", "99", "filter:all")
-        if response is False:
+        if response is None:
             _LOGGER.debug("Did not receive alarm data")
             return False
 
@@ -464,54 +536,59 @@ class Player:
             self._poll = asyncio.create_task(self._async_poll(interval))
         return True
 
-    async def _async_poll(self, interval):
+    async def _async_poll(self, interval: float) -> None:
         await asyncio.sleep(interval)
         asyncio.create_task(self.async_update())
 
-    async def async_set_volume(self, volume, timeout=TIMEOUT):
+    async def async_set_volume(
+        self, volume: int | str, timeout: float = TIMEOUT
+    ) -> bool:
         """Set volume level, range 0..100, or +/- integer."""
-        if isinstance(volume, str) and (
-            volume.startswith("+") or volume.startswith("-")
+        if (
+            isinstance(volume, str)
+            and (volume.startswith("+") or volume.startswith("-"))
+            or isinstance(volume, int)
+            and volume < 0
         ):
             await self.async_update()
-            target_volume = self.volume + int(volume)
+            target_volume = int(volume) + self.volume if self.volume else 0
         else:
             target_volume = int(volume)
-        if not await self.async_query("mixer", "volume", volume):
+        if not await self.async_command("mixer", "volume", str(volume)):
             return False
         return await self._wait_for_property("volume", target_volume, timeout)
 
-    async def async_set_muting(self, mute, timeout=TIMEOUT):
+    async def async_set_muting(self, mute: bool, timeout: float = TIMEOUT) -> bool:
         """Mute (true) or unmute (false) squeezebox."""
         mute_numeric = "1" if mute else "0"
-        if not await self.async_query("mixer", "muting", mute_numeric):
+        if not await self.async_command("mixer", "muting", mute_numeric):
             return False
         return await self._wait_for_property("muting", mute, timeout)
 
-    async def async_toggle_pause(self, timeout=TIMEOUT):
+    async def async_toggle_pause(self, timeout: float = TIMEOUT) -> bool:
         """Send command to player to toggle play/pause."""
         await self.async_update()
         target_mode = "pause" if self.mode == "play" else "play"
 
-        if not await self.async_query("pause"):
+        if not await self.async_command("pause"):
             return False
         return await self._wait_for_property("mode", target_mode, timeout)
 
-    async def async_play(self, timeout=TIMEOUT):
+    async def async_play(self, timeout: float = TIMEOUT) -> bool:
         """Send play command to player."""
-        if not await self.async_query("play"):
+        if not await self.async_command("play"):
             return False
         return await self._wait_for_property("mode", "play", timeout)
 
-    async def async_stop(self, timeout=TIMEOUT):
+    async def async_stop(self, timeout: float = TIMEOUT) -> bool:
         """Send stop command to player."""
         return await self._async_pause_stop(["stop"], timeout)
 
-    async def async_pause(self, timeout=TIMEOUT):
+    async def async_pause(self, timeout: float = TIMEOUT) -> bool:
         """Send pause command to player."""
         return await self._async_pause_stop(["pause", "1"], timeout)
 
-    async def _async_pause_stop(self, cmd, timeout=TIMEOUT):
+    async def _async_pause_stop(self, cmd: list[str], timeout: float = TIMEOUT) -> bool:
         """
         Retry pause or stop command until successful or timed out.
 
@@ -519,8 +596,8 @@ class Player:
         silently ignored by LMS.
         """
 
-        async def _verified_pause_stop(cmd):
-            success = await self.async_query(*cmd)
+        async def _verified_pause_stop(cmd: list[str]) -> bool:
+            success = await self.async_command(*cmd)
             if success:
                 return await self.async_update()
             _LOGGER.error("Failed to send command %s", cmd)
@@ -539,33 +616,45 @@ class Player:
         except asyncio.TimeoutError:
             return False
 
-    async def async_index(self, index, timeout=TIMEOUT):
+    async def async_index(self, index: int | str, timeout: float = TIMEOUT) -> bool:
         """
         Change position in playlist.
 
-        index: if an integer, change to this position. if preceded by a + or -,
+        index: if an unsigned integer, change to this position. if preceded by a + or -,
                move forward or backward this many tracks. (required)
         """
+
+        if isinstance(index, int):
+            index = str(index)
         if isinstance(index, str) and (index.startswith("+") or index.startswith("-")):
             await self.async_update()
+            if self.current_index is None:
+                _LOGGER.error(
+                    "Can't increment or decrement index when no current index exists."
+                )
+                return False
             target_index = self.current_index + int(index)
         else:
             target_index = int(index)
 
-        if not await self.async_query("playlist", "index", index):
+        if not await self.async_command("playlist", "index", index):
             return False
         return await self._wait_for_property("current_index", target_index, timeout)
 
-    async def async_time(self, position, timeout=TIMEOUT):
+    async def async_time(
+        self, position: int | float | str, timeout: float = TIMEOUT
+    ) -> bool:
         """Seek to a particular time in track."""
         if not position:
             return False
+
+        position = float(position)
 
         await self.async_update()
         if self.mode not in ["play", "pause"]:
             return False
 
-        if not await self.async_query("time", position):
+        if not await self.async_command("time", str(position)):
             return False
 
         try:
@@ -578,14 +667,16 @@ class Player:
         except asyncio.TimeoutError:
             return False
 
-    async def async_set_power(self, power, timeout=TIMEOUT):
+    async def async_set_power(self, power: bool, timeout: float = TIMEOUT) -> bool:
         """Turn on or off squeezebox."""
         power_numeric = "1" if power else "0"
-        if not await self.async_query("power", power_numeric):
+        if not await self.async_command("power", power_numeric):
             return False
         return await self._wait_for_property("power", power, timeout)
 
-    async def async_load_url(self, url, cmd="load", timeout=TIMEOUT):
+    async def async_load_url(
+        self, url: str, cmd: str = "load", timeout: float = TIMEOUT
+    ) -> bool:
         """
         Play a specific track by url.
 
@@ -596,9 +687,9 @@ class Player:
         """
         index = self.current_index or 0
 
-        if cmd in ["play_now", "insert", "add"] and self.playlist:
+        if cmd in ["play_now", "insert", "add"] and self.playlist_urls:
             await self.async_update()
-            target_playlist = self.playlist_urls
+            target_playlist = self.playlist_urls or []
             if cmd == "add":
                 target_playlist.append({"url": url})
             else:
@@ -612,11 +703,13 @@ class Player:
             await self.async_load_playlist(target_playlist)
             await self.async_index(index)
         else:
-            if not await self.async_query("playlist", cmd, url):
+            if not await self.async_command("playlist", cmd, url):
                 return False
         return await self._wait_for_property("playlist_urls", target_playlist, timeout)
 
-    async def async_load_playlist(self, playlist_ref, cmd="load"):
+    async def async_load_playlist(
+        self, playlist_ref: list[dict[str, str]], cmd: str = "load"
+    ) -> bool:
         """
         Play a playlist, of the sort return by the Player.playlist property.
 
@@ -647,19 +740,26 @@ class Player:
                 success = False
         return success
 
-    async def async_add_alarm(self, *, time, **params):
+    async def async_add_alarm(
+        self,
+        time: dt_time,
+        dow: list[int],
+        enabled: bool,
+        repeat: bool,
+        volume: int | None,
+        url: str | None,
+    ) -> str | None:
         """
         Creates a new alarm clock on this player.
         Follows the description on http(s)://<server>:<port>/html/docs/cli-api.html?player=#alarm
 
         Parameters
         ----------
-        time : int
-            Mandatory `time` of alarm in seconds from midnight
-        dow : str
+        time : datetime.time
+            Mandatory time of alarm
+        dow : list[int]
             Day Of Week. 0 is Sunday, 1 is Monday, etc. up to 6 being Saturday.
-            You can define a group of days by concatenating them with "," as separator.
-            Default: 0-6.
+            Default: [0, 1, 2, 3, 4, 5, 6]
         enabled : bool
             Default: False
         repeat : bool
@@ -676,17 +776,29 @@ class Player:
             ID of newly created alarm, None if not successfull
         """
 
-        params["time"] = time
+        params: AlarmParams = {
+            "time": time,
+            "dow": dow,
+            "enabled": enabled,
+            "repeat": repeat,
+            "volume": volume,
+            "url": url,
+        }
         parlist = _parse_alarm_params(params)
         response = await self.async_query("alarm", "add", *parlist)
-        if response is False:
+        if response is None:
             _LOGGER.debug("Alarm with params %s could not be added", parlist)
             return None
         else:
             _LOGGER.debug("Response when adding alarm: %s", response)
-            return response["id"]
+            return response.get("id")
 
-    async def async_update_alarm(self, alarm_id, **params):
+    async def async_update_alarm(
+        self,
+        *,
+        alarm_id: str,
+        **params: Unpack[AlarmParams],
+    ) -> str | None:
         """
         Updates an existing alarm clock
         Follows the description on http(s)://<server>:<port>/html/docs/cli-api.html?player=#alarm
@@ -719,14 +831,14 @@ class Player:
         parlist = _parse_alarm_params(params)
         parlist.append(f"id:{alarm_id}")
         response = await self.async_query("alarm", "update", *parlist)
-        if response is False:
+        if response is None:
             _LOGGER.debug("Alarm with id %s could not be updated", alarm_id)
-            return False
+            return None
         else:
             _LOGGER.debug("Response when updating alarm: %s", alarm_id)
-            return response["id"]
+            return response.get("id")
 
-    async def async_delete_alarm(self, alarm_id):
+    async def async_delete_alarm(self, alarm_id: str) -> bool:
         """
         Deletes an existing alarm clock
         Follows the description on http(s)://<server>:<port>/html/docs/cli-api.html?player=#alarm
@@ -743,34 +855,38 @@ class Player:
 
         """
         response = await self.async_query("alarm", "delete", f"id:{alarm_id}")
-        if response is False:
+        if response is None:
             _LOGGER.debug("Alarm with id %s could not be deleted", alarm_id)
             return False
         return True
 
-    async def async_set_shuffle(self, shuffle, timeout=TIMEOUT):
+    async def async_set_shuffle(self, shuffle: str, timeout: float = TIMEOUT) -> bool:
         """Enable/disable shuffle mode."""
         if shuffle in SHUFFLE_MODE:
             shuffle_int = SHUFFLE_MODE.index(shuffle)
-            if not await self.async_query("playlist", "shuffle", shuffle_int):
+            if not await self.async_command("playlist", "shuffle", str(shuffle_int)):
                 return False
             return await self._wait_for_property("shuffle", shuffle, timeout)
+        raise ValueError(f"Invalid shuffle mode: {shuffle}")
 
-    async def async_set_repeat(self, repeat, timeout=TIMEOUT):
+    async def async_set_repeat(self, repeat: str, timeout: float = TIMEOUT) -> bool:
         """Enable/disable repeat."""
         if repeat in REPEAT_MODE:
             repeat_int = REPEAT_MODE.index(repeat)
-            if not await self.async_query("playlist", "repeat", repeat_int):
+            if not await self.async_command("playlist", "repeat", str(repeat_int)):
                 return False
             return await self._wait_for_property("repeat", repeat, timeout)
+        raise ValueError(f"Invalid repeat mode: {repeat}")
 
-    async def async_clear_playlist(self, timeout=TIMEOUT):
+    async def async_clear_playlist(self, timeout: float = TIMEOUT) -> bool:
         """Send the media player the command for clear playlist."""
-        if not await self.async_query("playlist", "clear"):
+        if not await self.async_command("playlist", "clear"):
             return False
         return await self._wait_for_property("playlist", None, timeout)
 
-    async def async_sync(self, other_player, timeout=TIMEOUT):
+    async def async_sync(
+        self, other_player: "Player" | str, timeout: float = TIMEOUT
+    ) -> bool:
         """
         Add another Squeezebox player to this player's sync group.
 
@@ -789,7 +905,7 @@ class Player:
                 "async_sync called without other_player or other_player_id"
             )
 
-        if not await self.async_query("sync", other_player_id):
+        if not await self.async_command("sync", other_player_id):
             return False
 
         await self.async_update()
@@ -802,13 +918,15 @@ class Player:
         except asyncio.TimeoutError:
             return False
 
-    async def async_unsync(self, timeout=TIMEOUT):
+    async def async_unsync(self, timeout: float = TIMEOUT) -> bool:
         """Unsync this Squeezebox player."""
-        if not await self.async_query("sync", "-"):
+        if not await self.async_command("sync", "-"):
             return False
-        await self._wait_for_property("sync_group", [], timeout)
+        return await self._wait_for_property("sync_group", [], timeout)
 
-    async def async_browse(self, category, limit=None, **kwargs):
+    async def async_browse(
+        self, category: str, limit=None, **kwargs
+    ) -> QueryResult | None:
         """
         Browse the music library.
 
@@ -816,6 +934,6 @@ class Player:
         """
         return await self._lms.async_browse(category, limit=limit, **kwargs)
 
-    def generate_image_url_from_track_id(self, track_id):
+    def generate_image_url_from_track_id(self, track_id: str) -> str:
         """Return the image url for a track_id."""
         return self._lms.generate_image_url_from_track_id(track_id)

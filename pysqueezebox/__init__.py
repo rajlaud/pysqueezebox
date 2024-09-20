@@ -19,6 +19,7 @@ please let me know so I can credit you here.
 import logging
 
 from .discovery import async_discover
+
 # pylint: disable=unused-import
 from .player import Player
 from .server import Server
@@ -27,3 +28,6 @@ from .server import Server
 # Avoids spurious error messages if no logger is configured by the user
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
+
+
+__all__ = ["Server", "Player", "async_discover"]

@@ -14,6 +14,6 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/rajlaud/pysqueezebox",
     packages=setuptools.find_packages(exclude=["tests", "tests.*"]),
-    python_requires=">=3.6",
+    python_requires=">=3.10",
     install_requires=["aiohttp", "async-timeout"],
 )

@@ -10,10 +10,10 @@ PLEASE RESPECT THIS.
 """
 
 import asyncio
+from datetime import time as dt_time
 
 import aiohttp
 import pytest
-from datetime import time as dt_time
 from pysqueezebox import Player, Server, async_discover
 
 BROWSE_LIMIT = 50
@@ -22,12 +22,12 @@ BROWSE_LIMIT = 50
 # All test coroutines will be treated as marked.
 pytestmark = pytest.mark.asyncio
 
-IP = None
+IP = "boat-pi.internal"
 REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
 
 @pytest.fixture(name="lms", scope="module")
-async def fixture_lms(request):
+async def fixture_lms(request) -> Server:
     """Return a working Server object."""
     # Get the ip address and port from the command line
     ip = request.config.option.HOST if request.config.option.HOST else IP
@@ -45,7 +45,7 @@ async def fixture_lms(request):
 
 
 @pytest.fixture(name="players", scope="module")
-async def fixture_players(lms, request):
+async def fixture_players(lms, request) -> list[Player]:
     """Return list of players."""
     players = await lms.async_get_players()
     prefer = request.config.option.PREFER
@@ -74,7 +74,7 @@ async def fixture_players(lms, request):
     return include_players
 
 
-async def save_player_state(test_player):
+async def save_player_state(test_player) -> dict:
     """Save the state of a player to restore after testing."""
     state = {}
     await test_player.async_update()
@@ -87,7 +87,7 @@ async def save_player_state(test_player):
     return state
 
 
-async def restore_player_state(test_player, state):
+async def restore_player_state(test_player, state) -> None:
     """Restore the state of a player after testing."""
     await test_player.async_pause()
     await test_player.async_clear_playlist()
@@ -112,7 +112,7 @@ async def restore_player_state(test_player, state):
 
 
 @pytest.fixture(name="player", scope="module")
-async def fixture_player(players):
+async def fixture_player(players) -> Player:
     """Return a working Player object."""
     if len(players) < 1:
         pytest.fail("No players found. You can use a virtual player like squeezelite.")
@@ -134,7 +134,7 @@ async def fixture_player(players):
 
 
 @pytest.fixture(name="other_player", scope="module")
-async def fixture_other_player(players):
+async def fixture_other_player(players) -> Player:
     """Return a second working Player object."""
     if len(players) < 2:
         pytest.fail(
@@ -150,7 +150,7 @@ async def fixture_other_player(players):
 
 
 @pytest.fixture(name="broken_player", scope="module")
-async def broken_player_fixture(lms):
+async def broken_player_fixture(lms) -> Player:
     """Return a Player that does not work."""
     broken_player = Player(lms, "NOT A PLAYER ID", "Bogus player")
     assert not await broken_player.async_update()
@@ -158,7 +158,7 @@ async def broken_player_fixture(lms):
 
 
 @pytest.fixture(name="test_uris", scope="module")
-async def fixture_test_uris(player):
+async def fixture_test_uris(player) -> list[dict]:
     """Return the first three songs in the database to use in playlist tests."""
     test_songs = (
         await player.async_query("songs", "0", "4", "search:Beatles", "tags:u")
@@ -169,7 +169,7 @@ async def fixture_test_uris(player):
 
 
 @pytest.fixture(name="test_album", scope="module")
-async def fixture_test_album(player):
+async def fixture_test_album(player) -> list[dict]:
     """Return the first album in the database with multiple coverart tracks to use in
     album art test."""
     test_albums = (await player.async_query("albums", "0", "10"))["albums_loop"]
@@ -183,7 +183,7 @@ async def fixture_test_album(player):
     pytest.fail("Couldn't find album with cover art and 2+ tracks")
 
 
-async def test_discovery_integration():
+async def test_discovery_integration() -> None:
     """Test discovery - requires actual discoverable server."""
     event = asyncio.Event()
 
@@ -305,7 +305,7 @@ async def test_async_query(player):
     result = await player.async_query("status")
     assert result["mode"] in ["play", "pause", "stop"]
     # test query with no result
-    result = await player.async_query("pause", "1")
+    result = await player.async_command("pause", "1")
     assert result
     # test bad query
     result = await player.async_query("invalid")
