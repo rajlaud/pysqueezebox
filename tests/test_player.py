@@ -1,6 +1,7 @@
 """
 The following tests check the pysqueezebox.Player module while mocking I/O.
 """
+
 from unittest.mock import AsyncMock, call, patch
 
 import pytest
@@ -46,11 +47,13 @@ async def test_wait():
 
 async def test_verified_pause():
     """Test player._verified_pause_stop."""
-    with patch.object(Player, "async_query", AsyncMock(return_val=True)), patch.object(
-        Player, "async_update", AsyncMock(return_val=True)
-    ), patch.object(Player, "mode", "play"):
+    with patch.object(
+        Player, "async_command", AsyncMock(return_val=True)
+    ), patch.object(Player, "async_update", AsyncMock(return_val=True)), patch.object(
+        Player, "mode", "play"
+    ):
         mock_player = Player(None, "11:22:33:44:55", "Test Player")
         assert not await mock_player.async_pause(timeout=0.1)
         pause_args = ["pause", "1"]
-        await mock_player.async_query.has_calls([call(pause_args), call(pause_args)])
+        await mock_player.async_command.has_calls([call(pause_args), call(pause_args)])
         mock_player.async_update.assert_called()

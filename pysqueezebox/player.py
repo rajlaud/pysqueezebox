@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import time as dt_time
-from typing import Any, Callable, TypedDict, Unpack, TYPE_CHECKING
+from typing import Any, Callable, TypedDict, TYPE_CHECKING
 
 import async_timeout
 
@@ -34,7 +34,7 @@ PlayerStatus = TypedDict(
         "playlist_cur_index": str,
         "playlist_loop": list[dict[str, str]] | None,
         "remoteMeta": dict[str, str],
-        "playlist_timestamp": str,
+        "playlist_timestamp": int,
         "playlist_tracks": str,
         "playlist shuffle": int,
         "playlist repeat": int,
@@ -57,10 +57,10 @@ if TYPE_CHECKING:
 class AlarmParams(TypedDict, total=False):
     """Parameters for an alarm."""
 
-    time: dt_time
-    dow: list[int]
-    enabled: bool
-    repeat: bool
+    time: dt_time | None
+    dow: list[int] | None
+    enabled: bool | None
+    repeat: bool | None
     volume: int | None
     url: str | None
 
@@ -463,7 +463,7 @@ class Player:
             return False
 
         if "playlist_timestamp" in response and "playlist_tracks" in response:
-            playlist_timestamp = int(response["playlist_timestamp"])
+            playlist_timestamp = response["playlist_timestamp"]
             if (
                 playlist_timestamp > self._playlist_timestamp
                 or set(tags) > self._playlist_tags
