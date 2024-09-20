@@ -70,15 +70,15 @@ def _parse_alarm_params(params: AlarmParams) -> list[str]:
     parlist = []
 
     for key, value in params.items():
-        if key == "time":
+        if key == "time" and value is not None:
             value = params["time"]  # make mypy understand the type of value
             parlist.append(f"{key}:{value.hour*3600 + value.minute*60 + value.second}")
-        if key == "dow":
+        if key == "dow" and value is not None:
             value = params["dow"]  # make mypy understand the type of value
             parlist.append(f"{key}:{','.join(map(str, value))}")
-        if key in ["enabled", "repeat"]:
+        if key in ["enabled", "repeat"] and value is not None:
             parlist.append(f"{key}:{'1' if value else '0'}")
-        if key in ["volume", "url"]:
+        if key in ["volume", "url"] and value is not None:
             parlist.append(f"{key}:{value}")
     return parlist
 
@@ -743,11 +743,11 @@ class Player:
     async def async_add_alarm(
         self,
         time: dt_time,
-        dow: list[int],
-        enabled: bool,
-        repeat: bool,
-        volume: int | None,
-        url: str | None,
+        dow: list[int] = [0, 1, 2, 3, 4, 5, 6],
+        enabled: bool = False,
+        repeat: bool = True,
+        volume: int | None = None,
+        url: str | None = None,
     ) -> str | None:
         """
         Creates a new alarm clock on this player.
@@ -795,9 +795,13 @@ class Player:
 
     async def async_update_alarm(
         self,
-        *,
         alarm_id: str,
-        **params: Unpack[AlarmParams],
+        time: dt_time | None = None,
+        dow: list[int] | None = None,
+        enabled: bool | None = None,
+        repeat: bool | None = None,
+        volume: int | None = None,
+        url: str | None = None,
     ) -> str | None:
         """
         Updates an existing alarm clock
@@ -827,7 +831,14 @@ class Player:
         alarm_id: str
             ID of updated alarm, None if not successful
         """
-
+        params = {
+            "time": time,
+            "dow": dow,
+            "enabled": enabled,
+            "repeat": repeat,
+            "volume": volume,
+            "url": url,
+        }
         parlist = _parse_alarm_params(params)
         parlist.append(f"id:{alarm_id}")
         response = await self.async_query("alarm", "update", *parlist)
