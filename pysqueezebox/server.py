@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import urllib
+import re
+from urllib.parse import urljoin
 
 from typing import Any, TypedDict
 
@@ -53,7 +54,7 @@ class Server:
     squeezebox integration are implemented.
     """
 
-    # pylint: disable=too-many-arguments, bad-continuation
+    # pylint: disable=too-many-arguments
     def __init__(
         self,
         session: aiohttp.ClientSession | None,
@@ -291,7 +292,8 @@ class Server:
               image_url (optional): image url if available. will not be set if unavailable
 
         Parameters:
-            category: playlists, playlist, albums, album, artists, artist, titles, genres, genre
+            category: one of playlists, playlist, albums, album, artists, artist, titles,
+              genres, genre, favorites, favorite
             limit (optional): set maximum number of results
             browse_id (optional): tuple of id type and value
               id type: "album_id", "artist_id", "genre_id", or "track_id"
@@ -300,10 +302,11 @@ class Server:
         browse: dict[str, Any] = {}
         search = f"{browse_id[0]}:{browse_id[1]}" if browse_id else None
 
-        if category in ["playlist", "album", "artist", "genre"] and browse_id:
-            browse["title"] = await self.async_get_category_title(
-                category, browse_id[1]
-            )
+        if (
+            category in ["playlist", "album", "artist", "genre", "title", "favorite"]
+            and browse_id
+        ):
+            browse["title"] = await self.async_get_category_title(category, search)
         else:
             browse["title"] = category.title()
 
@@ -325,11 +328,11 @@ class Server:
 
     async def async_get_count(self, category: str) -> int:
         """Return number of category in database."""
-        result = await self.async_query(category, "0", "1", "count")
-        if result is None or "count" not in result:
-            _LOGGER.debug("Invalid response to count query: %s", result)
-            return 0
-        assert isinstance(result["count"], int)
+        query = [category]
+        if category == "favorites":
+            query.append("items")
+        query.extend(["0", "1"])
+        result = await self.async_query(*query)
         return result["count"]
 
     async def async_query_category(
@@ -338,21 +341,29 @@ class Server:
         """Return list of entries in category, optionally filtered by search string."""
         if not limit:
             limit = await self.async_get_count(category)
-        if search and "playlist_id" in search:
+
+        if category == "titles" and search and "playlist_id" in search:
             # workaround LMS bug - playlist_id doesn't work for "titles" search
             query = ["playlists", "tracks", "0", f"{limit}", search]
             query.append("tags:ju")
-            category = "playlisttracks"
+        elif search and "item_id" in search:
+            # we have to look up favorites separately
+            query = ["favorites", "items", "0", f"{limit}", search]
         else:
-            query = [category, "0", f"{limit}"]
-            if search:
-                query.append(search)
+            if category in ["favorite", "favorites"]:
+                query = ["favorites", "items"]
+            else:
+                query = [category]
+            query.extend(["0", f"{limit}", search])
 
-        if category == "albums":
-            query.append("tags:jl")
-        elif category == "titles":
+        # add command-specific suffixes
+        if query[0] == "albums":
+            query.append("tags:jla")
+        elif query[0] == "titles":
             query.append("sort:albumtrack")
             query.append("tags:ju")
+        elif query[0] == "favorites":
+            query.append("want_url:1")
 
         result = await self.async_query(*query)
         if not result or "count" not in result or not isinstance(result["count"], int):
@@ -361,26 +372,46 @@ class Server:
         if result["count"] == 0:
             return None
 
+        items = None
         try:
+            if query[0] == "favorites":
+                items = result["loop_loop"]  # strange, but what LMS returns
+            elif category == "titles" and query[0] == "playlists":
+                items = result["playlisttracks_loop"]
+            else:
+                items = result[f"{category}_loop"]
             items = result[f"{category}_loop"]
             assert isinstance(items, list)
             for item in items:
-                assert isinstance(item, dict)
-                if category != "playlisttracks":
+                if query[0] == "favorites":
+                    if item["isaudio"] != 1 and item["hasitems"] != 1:
+                        continue
+                    item["title"] = item.pop("name")
+                    if item.get("url", "").startswith("db:album.title"):
+                        item["album_id"] = await self.async_get_album_id_from_url(
+                            item["url"]
+                        )
+                    if "image" in item:
+                        item["image_url"] = self.generate_image_url(item.pop("image"))
+                        if track_id := self.get_track_id_from_image_url(
+                            item["image_url"]
+                        ):
+                            item["artwork_track_id"] = track_id
+                elif query[0] not in ["playlists", "favorites"]:
                     item["title"] = item.pop(category[:-1])
 
-                if category in ["albums", "titles", "playlisttracks"]:
-                    if "artwork_track_id" in item:
-                        artwork_track_id = item["artwork_track_id"]
-                        assert isinstance(artwork_track_id, str)
-                        item["image_url"] = self.generate_image_url_from_track_id(
-                            artwork_track_id
-                        )
+                if "artwork_track_id" in item:
+                    item["image_url"] = self.generate_image_url_from_track_id(
+                        item["artwork_track_id"]
+                    )
             return items
 
         except KeyError:
-            _LOGGER.error("Could not find results loop for category %s", category)
-            _LOGGER.error("Got result %s", result)
+            if not items:
+                _LOGGER.error("Could not find results loop for category %s", category)
+                _LOGGER.error("Got result %s", result)
+            else:
+                raise
 
         return None
 
@@ -432,7 +463,7 @@ class Server:
         else:
             self._browse_cache[category] = None
 
-        if limit and result is not None:
+        if limit and result:
             return result[:limit]
         return result
 
@@ -441,8 +472,6 @@ class Server:
     ) -> str | None:
         """
         Search of the category name corresponding to a title.
-
-        Use the cache because of a bug in how LMS handles this search.
         """
         category_list = await self.async_get_category(f"{category}s")
         if category_list is not None:
@@ -462,10 +491,14 @@ class Server:
         base_url = f"{self._prefix}://"
         if self._username and self._password:
             base_url += urllib.parse.quote(self._username, safe="")
-            base_url += ":"
-            base_url += urllib.parse.quote(self._password, safe="")
-            base_url += "@"
 
         base_url += f"{self.host}:{self.port}/"
 
-        return urllib.parse.urljoin(base_url, image_url)
+        return urljoin(base_url, image_url)
+
+    def get_track_id_from_image_url(self, image_url):
+        """Get a track id from an image url."""
+        match = re.search(r"^(?:/?)music/([^/]+)/cover.*", image_url)
+        if match:
+            return match.group(1)
+        return None

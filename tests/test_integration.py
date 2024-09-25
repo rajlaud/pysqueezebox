@@ -22,7 +22,7 @@ BROWSE_LIMIT = 50
 # All test coroutines will be treated as marked.
 pytestmark = pytest.mark.asyncio
 
-IP = None
+IP = "192.168.88.3"
 REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
 
@@ -35,7 +35,7 @@ async def fixture_lms(request) -> Server:
     https = request.config.option.HTTPS
 
     if ip is None:
-        pytest.fail("No ip address specified. Use the --ip option.")
+        pytest.fail("No ip address specified. Use the --host option.")
 
     async with aiohttp.ClientSession() as session:
         server = Server(session, ip, port, https=https)
@@ -245,6 +245,7 @@ async def test_browse(lms):
         ("artists", "artist_id"),
         ("genres", "genre_id"),
         ("albums", "album_id"),
+        ("favorites", "item_id"),
         ("titles", "title_id"),
     ]
 
