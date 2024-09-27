@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from datetime import time as dt_time
-from typing import Any, Callable, TypedDict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, TypedDict
 
 import async_timeout
 
@@ -19,7 +20,45 @@ TIMEOUT = 5
 # how quickly to poll server waiting for command to reach player
 POLL_INTERVAL = 0.75
 
-# type for status query responses
+# types for status query responses
+
+
+class PlaylistEntry(TypedDict, total=False):
+    """Typed dictionary with minimum info to be a playlist entry."""
+
+    url: str
+
+
+class Track(PlaylistEntry, total=False):
+    """Extend PlaylistEntry to include other track properties."""
+
+    title: str
+    artist: str
+    album: str
+    type: str
+    bitrate: str
+    samplerate: str
+    samplesize: str
+    duration: str
+    coverid: int
+    remote_title: str
+    artwork_url: str
+
+
+AlarmJSON = TypedDict(
+    "AlarmJSON",
+    {
+        "time": int,
+        "dow": str,
+        "enabled": str,
+        "repeat": str,
+        "volume": str,
+        "url": str,
+        "id": str,
+    },
+    total=False,
+)
+
 PlayerStatus = TypedDict(
     "PlayerStatus",
     {
@@ -32,8 +71,8 @@ PlayerStatus = TypedDict(
         "remote": int,
         "remote_title": str,
         "playlist_cur_index": str,
-        "playlist_loop": list[dict[str, str]] | None,
-        "remoteMeta": dict[str, str],
+        "playlist_loop": list[Track] | None,
+        "remoteMeta": Track | None,
         "playlist_timestamp": int,
         "playlist_tracks": str,
         "playlist shuffle": int,
@@ -42,7 +81,7 @@ PlayerStatus = TypedDict(
         "samplesize": str,
         "sync_master": str,
         "sync_slaves": str,
-        "alarms_loop": list[dict[str, str]] | None,
+        "alarms_loop": list[AlarmJSON] | None,
     },
     total=False,
 )
@@ -54,28 +93,29 @@ if TYPE_CHECKING:
 # pylint: disable=too-many-public-methods
 
 
-class AlarmParams(TypedDict, total=False):
+class Alarm(TypedDict, total=False):
     """Parameters for an alarm."""
 
-    time: dt_time | None
-    dow: list[int] | None
-    enabled: bool | None
-    repeat: bool | None
-    volume: int | None
-    url: str | None
+    time: dt_time
+    dow: list[int]
+    enabled: bool
+    repeat: bool
+    volume: int
+    url: str
+    id: str
 
 
-def _parse_alarm_params(params: AlarmParams) -> list[str]:
+def _parse_alarm_params(params: Alarm) -> list[str]:
     """Take typed inputs and convert them to strings suitable for LMS."""
     parlist = []
 
     for key, value in params.items():
-        if key == "time" and value is not None:
-            value = params["time"]  # make mypy understand the type of value
-            parlist.append(f"{key}:{value.hour*3600 + value.minute*60 + value.second}")
-        if key == "dow" and value is not None:
-            value = params["dow"]  # make mypy understand the type of value
-            parlist.append(f"{key}:{','.join(map(str, value))}")
+        if key == "time" and params["time"] is not None:
+            time = params["time"]
+            parlist.append(f"{key}:{time.hour*3600 + time.minute*60 + time.second}")
+        if key == "dow" and params["dow"] is not None:
+            dow = params["dow"]
+            parlist.append(f"{key}:{','.join(map(str, dow))}")
         if key in ["enabled", "repeat"] and value is not None:
             parlist.append(f"{key}:{'1' if value else '0'}")
         if key in ["volume", "url"] and value is not None:
@@ -248,7 +288,7 @@ class Player:
         return None
 
     @property
-    def current_track(self) -> dict[str, str] | None:
+    def current_track(self) -> Track | None:
         """Return playlist_loop or remoteMeta dictionary for current track."""
         try:
             return self._status["remoteMeta"]
@@ -348,17 +388,39 @@ class Player:
         return None
 
     @property
-    def playlist(self) -> list[dict[str, str]] | None:
+    def playlist(self) -> list[Track] | None:
         """Return the current playlist."""
         return self._status.get("playlist_loop")
 
     @property
-    def alarms(self) -> list[dict[str, str]] | None:
+    def alarms(self) -> list[Alarm] | None:
         """Return the list of alarms."""
-        return self._status.get("alarms_loop")
+        result: list[Alarm] = []
+        if (
+            "alarms_loop" in self._status
+            and self._status["alarms_loop"] is not None
+            and len(self._status["alarms_loop"]) > 0
+        ):
+            for alarm in self._status["alarms_loop"]:
+                seconds = int(alarm["time"])
+                minutes, seconds = divmod(seconds, 60)
+                hours, minutes = divmod(minutes, 60)
+                result.append(
+                    {
+                        "time": dt_time(second=seconds, minute=minutes, hour=hours),
+                        "dow": list(map(int, alarm["dow"].split(","))),
+                        "enabled": alarm["enabled"] == "1",
+                        "repeat": alarm["repeat"] == "1",
+                        "volume": int(alarm["volume"]),
+                        "url": alarm["url"],
+                        "id": alarm["id"],
+                    }
+                )
+            return result
+        return None
 
     @property
-    def playlist_urls(self) -> list[dict[str, str]] | None:
+    def playlist_urls(self) -> list[PlaylistEntry] | None:
         """Return only the urls of the current playlist. Useful for comparing playlists."""
         if not self.playlist:
             return None
@@ -439,7 +501,7 @@ class Player:
         """Send a command to the player."""
         return await self._lms.async_command(*parameters, player=self._id)
 
-    async def async_query(self, *parameters: str) -> dict[str, Any] | None:
+    async def async_query(self, *parameters: str) -> QueryResult | None:
         """Return result of a query specific to this player."""
         return await self._lms.async_query(*parameters, player=self._id)
 
@@ -462,7 +524,12 @@ class Player:
         if response is None:
             return False
 
-        if "playlist_timestamp" in response and "playlist_tracks" in response:
+        if (
+            "playlist_timestamp" in response
+            and isinstance(response["playlist_timestamp"], int)
+            and "playlist_tracks" in response
+            and isinstance(response["playlist_tracks"], int)
+        ):
             playlist_timestamp = response["playlist_timestamp"]
             if (
                 playlist_timestamp > self._playlist_timestamp
@@ -473,7 +540,7 @@ class Player:
                 # poll server again for full playlist, which has either changed
                 # or about which we are seeking new tags
                 response = await self.async_query(
-                    "status", "0", response["playlist_tracks"], f"tags:{tags}"
+                    "status", "0", str(response["playlist_tracks"]), f"tags:{tags}"
                 )
 
                 if response is None:
@@ -499,21 +566,9 @@ class Player:
             _LOGGER.debug("Did not receive alarm data")
             return False
 
-        if response["count"] > 0:
-            # convert string responses to appropriate types
-            for item in response["alarms_loop"]:
-                seconds = int(item["time"])
-                item["time"] = dt_time(
-                    hour=seconds // 3600,
-                    minute=(seconds % 3600) // 60,
-                    second=seconds % 60,
-                )
-                item["enabled"] = item["enabled"] == "1"
-                item["repeat"] = item["repeat"] == "1"
-                item["volume"] = int(item["volume"])
-                item["dow"] = item["dow"].split(",")
-                item["dow"] = [int(day) for day in item["dow"]]
-            self._status.update({"alarms_loop": response["alarms_loop"]})
+        if "alarms_loop" in response:
+            # todo: validate the alarm data
+            self._status.update({"alarms_loop": response["alarms_loop"]})  # type: ignore
         else:
             self._status.update({"alarms_loop": None})
 
@@ -689,7 +744,7 @@ class Player:
 
         if cmd in ["play_now", "insert", "add"] and self.playlist_urls:
             await self.async_update()
-            target_playlist = self.playlist_urls or []
+            target_playlist: list[PlaylistEntry] = self.playlist_urls or []
             if cmd == "add":
                 target_playlist.append({"url": url})
             else:
@@ -708,7 +763,7 @@ class Player:
         return await self._wait_for_property("playlist_urls", target_playlist, timeout)
 
     async def async_load_playlist(
-        self, playlist_ref: list[dict[str, str]], cmd: str = "load"
+        self, playlist_ref: Sequence[PlaylistEntry], cmd: str = "load"
     ) -> bool:
         """
         Play a playlist, of the sort return by the Player.playlist property.
@@ -776,14 +831,17 @@ class Player:
             ID of newly created alarm, None if not successfull
         """
 
-        params: AlarmParams = {
+        params: Alarm = {
             "time": time,
             "dow": dow,
             "enabled": enabled,
             "repeat": repeat,
-            "volume": volume,
-            "url": url,
         }
+
+        if volume is not None:
+            params["volume"] = volume
+        if url is not None:
+            params["url"] = url
         parlist = _parse_alarm_params(params)
         response = await self.async_query("alarm", "add", *parlist)
         if response is None:
@@ -791,7 +849,9 @@ class Player:
             return None
         else:
             _LOGGER.debug("Response when adding alarm: %s", response)
-            return response.get("id")
+            if "id" in response and isinstance(response["id"], str):
+                return response["id"]
+            return None
 
     async def async_update_alarm(
         self,
@@ -831,14 +891,19 @@ class Player:
         alarm_id: str
             ID of updated alarm, None if not successful
         """
-        params = {
-            "time": time,
-            "dow": dow,
-            "enabled": enabled,
-            "repeat": repeat,
-            "volume": volume,
-            "url": url,
-        }
+        params: Alarm = {}
+        if time is not None:
+            params["time"] = time
+        if dow is not None:
+            params["dow"] = dow
+        if enabled is not None:
+            params["enabled"] = enabled
+        if repeat is not None:
+            params["repeat"] = repeat
+        if volume is not None:
+            params["volume"] = volume
+        if url is not None:
+            params["url"] = url
         parlist = _parse_alarm_params(params)
         parlist.append(f"id:{alarm_id}")
         response = await self.async_query("alarm", "update", *parlist)
@@ -847,7 +912,9 @@ class Player:
             return None
         else:
             _LOGGER.debug("Response when updating alarm: %s", alarm_id)
-            return response.get("id")
+            if "id" in response and isinstance(response["id"], str):
+                return response["id"]
+            return None
 
     async def async_delete_alarm(self, alarm_id: str) -> bool:
         """
@@ -936,15 +1003,18 @@ class Player:
         return await self._wait_for_property("sync_group", [], timeout)
 
     async def async_browse(
-        self, category: str, limit=None, **kwargs
+        self,
+        category: str,
+        limit: int | None = None,
+        browse_id: tuple[str, str] | None = None,
     ) -> QueryResult | None:
         """
         Browse the music library.
 
         See Server.async_browse for parameters.
         """
-        return await self._lms.async_browse(category, limit=limit, **kwargs)
+        return await self._lms.async_browse(category, limit=limit, browse_id=browse_id)
 
-    def generate_image_url_from_track_id(self, track_id: str) -> str:
+    def generate_image_url_from_track_id(self, track_id: int) -> str:
         """Return the image url for a track_id."""
         return self._lms.generate_image_url_from_track_id(track_id)

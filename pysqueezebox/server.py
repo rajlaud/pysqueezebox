@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import re
-from urllib.parse import urljoin
+import urllib
 
 from typing import Any, TypedDict
 
@@ -304,7 +304,7 @@ class Server:
 
         if (
             category in ["playlist", "album", "artist", "genre", "title", "favorite"]
-            and browse_id
+            and search
         ):
             browse["title"] = await self.async_get_category_title(category, search)
         else:
@@ -333,7 +333,9 @@ class Server:
             query.append("items")
         query.extend(["0", "1"])
         result = await self.async_query(*query)
-        return result["count"]
+        if result and "count" in result and isinstance(result["count"], int):
+            return result["count"]
+        return 0
 
     async def async_query_category(
         self, category: str, limit: int | None = None, search: str | None = None
@@ -354,7 +356,9 @@ class Server:
                 query = ["favorites", "items"]
             else:
                 query = [category]
-            query.extend(["0", f"{limit}", search])
+            query.extend(["0", f"{limit}"])
+            if search:
+                query.append(search)
 
         # add command-specific suffixes
         if query[0] == "albums":
@@ -387,23 +391,33 @@ class Server:
                     if item["isaudio"] != 1 and item["hasitems"] != 1:
                         continue
                     item["title"] = item.pop("name")
-                    if item.get("url", "").startswith("db:album.title"):
-                        item["album_id"] = await self.async_get_album_id_from_url(
-                            item["url"]
-                        )
+                    if (
+                        "url" in item
+                        and isinstance(item["url"], str)
+                        and item["url"].startswith("db:album.title")
+                    ):
+                        album_id = await self.async_get_album_id_from_url(item["url"])
+                        if album_id is not None:
+                            item["album_id"] = album_id
                     if "image" in item:
-                        item["image_url"] = self.generate_image_url(item.pop("image"))
-                        if track_id := self.get_track_id_from_image_url(
-                            item["image_url"]
-                        ):
-                            item["artwork_track_id"] = track_id
+                        image = item.pop("image")
+                        if isinstance(image, str):
+                            if image_url := self.generate_image_url(image):
+                                item["image_url"] = image_url
+                                if track_id := self.get_track_id_from_image_url(
+                                    image_url
+                                ):
+                                    item["artwork_track_id"] = track_id
                 elif query[0] not in ["playlists", "favorites"]:
                     item["title"] = item.pop(category[:-1])
 
-                if "artwork_track_id" in item:
-                    item["image_url"] = self.generate_image_url_from_track_id(
+                if "artwork_track_id" in item and isinstance(
+                    item["artwork_track_id"], int
+                ):
+                    if image_url := self.generate_image_url_from_track_id(
                         item["artwork_track_id"]
-                    )
+                    ):
+                        item["image_url"] = image_url
             return items
 
         except KeyError:
@@ -482,7 +496,7 @@ class Server:
                 return result.get("title")
         return None
 
-    def generate_image_url_from_track_id(self, track_id: str | int) -> str:
+    def generate_image_url_from_track_id(self, track_id: int) -> str:
         """Generate an image url using a track id."""
         return self.generate_image_url(f"/music/{track_id}/cover.jpg")
 
@@ -491,14 +505,38 @@ class Server:
         base_url = f"{self._prefix}://"
         if self._username and self._password:
             base_url += urllib.parse.quote(self._username, safe="")
+            base_url += ":"
+            base_url += urllib.parse.quote(self._password, safe="")
+            base_url += "@"
 
         base_url += f"{self.host}:{self.port}/"
 
-        return urljoin(base_url, image_url)
+        return urllib.parse.urljoin(base_url, image_url)
 
-    def get_track_id_from_image_url(self, image_url):
+    def get_track_id_from_image_url(self, image_url: str) -> str | None:
         """Get a track id from an image url."""
         match = re.search(r"^(?:/?)music/([^/]+)/cover.*", image_url)
         if match:
             return match.group(1)
+        return None
+
+    async def async_get_album_id_from_url(self, url: str) -> int | None:
+        """Find the album_id from a favorites url."""
+        album_seach_string = urllib.parse.unquote(url)[15:].split("&contributor.name=")
+        album_title = album_seach_string[0]
+        album_contributor = (
+            album_seach_string[1] if len(album_seach_string) > 1 else None
+        )
+
+        albums = await self.async_get_category("albums")
+        if albums and len(albums) > 0:
+            for album in albums:
+                if album["title"] == album_title:
+                    if album_contributor:
+                        if album["artist"] == album_contributor:
+                            return int(album["id"])
+                    else:
+                        return int(album["id"])
+                else:
+                    continue
         return None

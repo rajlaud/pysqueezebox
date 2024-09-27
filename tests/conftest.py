@@ -1,12 +1,13 @@
 """Common functions and fixtures for pysqueezebox tests."""
 
 import asyncio
+from collections.abc import Generator
 
 import pytest
 
 
 @pytest.fixture(scope="session")
-def event_loop():
+def event_loop() -> Generator[asyncio.AbstractEventLoop]:
     """
     Re-scope the event loop to cover this session. Allows to use one aiohttp session
     for all of the tests.
@@ -16,7 +17,7 @@ def event_loop():
     loop.close()
 
 
-def pytest_addoption(parser):
+def pytest_addoption(parser: pytest.Parser) -> None:
     """Add the commandline options"""
     parser.addoption(
         "--host",
@@ -64,7 +65,7 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_runtest_setup(item):
+def pytest_runtest_setup(item: pytest.Item) -> None:
     """Skip tests marked 'integration' unless an ip address is given."""
     if "integration" in item.keywords and not item.config.getoption("--host"):
         pytest.skip(

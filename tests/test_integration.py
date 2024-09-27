@@ -10,11 +10,15 @@ PLEASE RESPECT THIS.
 """
 
 import asyncio
+from collections.abc import AsyncGenerator
 from datetime import time as dt_time
+from typing import TypedDict
 
 import aiohttp
 import pytest
+
 from pysqueezebox import Player, Server, async_discover
+from pysqueezebox.player import Alarm, PlaylistEntry, Track
 
 BROWSE_LIMIT = 50
 
@@ -25,9 +29,24 @@ pytestmark = pytest.mark.asyncio
 IP = "192.168.88.3"
 REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
+PlayerState = TypedDict(
+    "PlayerState",
+    {
+        "power": bool,
+        "mode": str,
+        "time": int,
+        "playlist": list[Track] | None,
+        "sync_group": list[str],
+        "alarms": list[Alarm],
+    },
+    total=False,
+)
+
 
 @pytest.fixture(name="lms", scope="module")
-async def fixture_lms(request) -> Server:
+async def fixture_lms(
+    request: pytest.FixtureRequest,
+) -> AsyncGenerator[Server]:
     """Return a working Server object."""
     # Get the ip address and port from the command line
     ip = request.config.option.HOST if request.config.option.HOST else IP
@@ -45,9 +64,12 @@ async def fixture_lms(request) -> Server:
 
 
 @pytest.fixture(name="players", scope="module")
-async def fixture_players(lms, request) -> list[Player]:
+async def fixture_players(lms: Server, request: pytest.FixtureRequest) -> list[Player]:
     """Return list of players."""
     players = await lms.async_get_players()
+    if not players or len(players) == 0:
+        pytest.fail("No players found. You can use a virtual player like squeezelite.")
+
     prefer = request.config.option.PREFER
     exclude = request.config.option.EXCLUDE if request.config.option.EXCLUDE else []
 
@@ -74,20 +96,25 @@ async def fixture_players(lms, request) -> list[Player]:
     return include_players
 
 
-async def save_player_state(test_player) -> dict:
+async def save_player_state(test_player: Player) -> PlayerState:
     """Save the state of a player to restore after testing."""
-    state = {}
+    state: PlayerState = {}
     await test_player.async_update()
-    state["power"] = test_player.power
-    state["mode"] = test_player.mode
-    state["time"] = test_player.time
+    if test_player.power is not None:
+        state["power"] = test_player.power
+    if test_player.mode is not None:
+        state["mode"] = test_player.mode
+    if test_player.time is not None:
+        state["time"] = test_player.time
     state["playlist"] = test_player.playlist.copy() if test_player.playlist else None
-    state["sync_group"] = test_player.sync_group
-    state["alarms"] = test_player.alarms
+    if test_player.sync_group is not None:
+        state["sync_group"] = test_player.sync_group
+    if test_player.alarms is not None:
+        state["alarms"] = test_player.alarms
     return state
 
 
-async def restore_player_state(test_player, state) -> None:
+async def restore_player_state(test_player: Player, state: PlayerState) -> None:
     """Restore the state of a player after testing."""
     await test_player.async_pause()
     await test_player.async_clear_playlist()
@@ -112,7 +139,7 @@ async def restore_player_state(test_player, state) -> None:
 
 
 @pytest.fixture(name="player", scope="module")
-async def fixture_player(players) -> Player:
+async def fixture_player(players: list[Player]) -> AsyncGenerator[Player]:
     """Return a working Player object."""
     if len(players) < 1:
         pytest.fail("No players found. You can use a virtual player like squeezelite.")
@@ -134,7 +161,7 @@ async def fixture_player(players) -> Player:
 
 
 @pytest.fixture(name="other_player", scope="module")
-async def fixture_other_player(players) -> Player:
+async def fixture_other_player(players: list[Player]) -> AsyncGenerator[Player]:
     """Return a second working Player object."""
     if len(players) < 2:
         pytest.fail(
@@ -150,7 +177,7 @@ async def fixture_other_player(players) -> Player:
 
 
 @pytest.fixture(name="broken_player", scope="module")
-async def broken_player_fixture(lms) -> Player:
+async def broken_player_fixture(lms: Server) -> AsyncGenerator[Player]:
     """Return a Player that does not work."""
     broken_player = Player(lms, "NOT A PLAYER ID", "Bogus player")
     assert not await broken_player.async_update()
@@ -158,27 +185,49 @@ async def broken_player_fixture(lms) -> Player:
 
 
 @pytest.fixture(name="test_uris", scope="module")
-async def fixture_test_uris(player) -> list[dict]:
+async def fixture_test_uris(player: Player) -> list[str]:
     """Return the first three songs in the database to use in playlist tests."""
-    test_songs = (
-        await player.async_query("songs", "0", "4", "search:Beatles", "tags:u")
-    )["titles_loop"]
-    assert len(test_songs) == 4
-    test_uris = [i["url"] for i in test_songs]
+    result = await player.async_query("songs", "0", "4", "search:Beatles", "tags:u")
+    if (
+        not result
+        or "titles_loop" not in result
+        or not isinstance(result["titles_loop"], list)
+        or len(result["titles_loop"]) < 4
+    ):
+        pytest.fail("Couldn't find enough songs to test with")
+    test_songs = result["titles_loop"]
+    assert isinstance(test_songs, list) and len(test_songs) == 4
+    test_uris = [str(i["url"]) for i in test_songs]
     return test_uris
 
 
 @pytest.fixture(name="test_album", scope="module")
-async def fixture_test_album(player) -> list[dict]:
+async def fixture_test_album(player: Player) -> list[PlaylistEntry]:
     """Return the first album in the database with multiple coverart tracks to use in
     album art test."""
-    test_albums = (await player.async_query("albums", "0", "10"))["albums_loop"]
+    result = await player.async_query("albums", "0", "10")
+    if (
+        not result
+        or "albums_loop" not in result
+        or not isinstance(result["albums_loop"], list)
+        or len(result["albums_loop"]) < 1
+    ):
+        pytest.fail("Couldn't find enough albums to test with")
+    test_albums = result["albums_loop"]
     for album in test_albums:
         tracks = await player.async_query(
             "tracks", "0", "2", f"album_id:{album['id']}", "tags:ju"
         )
-        if tracks["count"] > 1 and "coverart" in tracks["titles_loop"][0]:
-            return [{"url": track["url"]} for track in tracks["titles_loop"]]
+        if (
+            tracks is not None
+            and "count" in tracks
+            and isinstance(tracks["count"], int)
+            and tracks["count"] > 1
+            and "titles_loop" in tracks
+            and isinstance(tracks["titles_loop"], list)
+            and "coverart" in tracks["titles_loop"][0]
+        ):
+            return [{"url": str(track["url"])} for track in tracks["titles_loop"]]
 
     pytest.fail("Couldn't find album with cover art and 2+ tracks")
 
@@ -187,7 +236,7 @@ async def test_discovery_integration() -> None:
     """Test discovery - requires actual discoverable server."""
     event = asyncio.Event()
 
-    def _discovery_callback(server):
+    def _discovery_callback(server: Server):
         global IP
         IP = server.host
         event.set()
@@ -201,22 +250,24 @@ async def test_discovery_integration() -> None:
     await task
 
 
-async def test_server_status(lms):
+async def test_server_status(lms: Server) -> None:
     """Test server.async_status() method."""
     print(await lms.async_status())
     assert lms.uuid is not None  # should be set by async_status()
 
 
-async def test_get_players(lms):
+async def test_get_players(lms: Server) -> None:
     """Test server.async_get_players() method."""
     players = await lms.async_get_players()
+    assert players is not None
     for player in players:
         assert isinstance(player, Player)
     await lms.async_status()
+    assert lms.status is not None
     assert len(players) == lms.status["player count"]
 
 
-async def test_get_player(lms, player):
+async def test_get_player(lms: Server, player: Player) -> None:
     """
     Tests server.async_get_player() method.
 
@@ -224,6 +275,8 @@ async def test_get_player(lms, player):
     """
     test_player_a = await lms.async_get_player(name=player.name)
     test_player_b = await lms.async_get_player(player_id=player.player_id)
+    assert test_player_a is not None
+    assert test_player_b is not None
     assert test_player_a.name == test_player_b.name
     assert test_player_a.player_id == test_player_b.player_id
 
@@ -235,10 +288,11 @@ async def test_get_player(lms, player):
 
     # check that we handle a name as player_id correctly
     test_player_c = await lms.async_get_player(player.name)
+    assert test_player_c is not None
     assert player.player_id == test_player_c.player_id
 
 
-async def test_browse(lms):
+async def test_browse(lms: Server) -> None:
     """Test browsing the library."""
     categories = [
         ("playlists", "playlist_id"),
@@ -256,11 +310,14 @@ async def test_browse(lms):
     await lookup_helper(lms, "artists", "artist_id")
 
 
-async def lookup_helper(lms, category, id_type, limit=BROWSE_LIMIT):
+async def lookup_helper(
+    lms: Server, category: str, id_type: str, limit: int = BROWSE_LIMIT
+) -> None:
     """Lookup a known item and make sure the name matches."""
     result = await lms.async_browse(category, limit)
+    assert result is not None and "title" in result
     assert result["title"] is not None
-    assert len(result["items"]) > 0
+    assert "items" in result and isinstance(result, list) and len(result["items"]) > 0
     browse_id = result["items"][0].get("id")
     title = result["items"][0].get("title")
     assert browse_id is not None
@@ -278,7 +335,7 @@ async def lookup_helper(lms, category, id_type, limit=BROWSE_LIMIT):
         )
 
 
-def print_properties(player):
+def print_properties(player: Player) -> None:
     """Print all properties of player."""
     for p in dir(Player):
         prop = getattr(Player, p)
@@ -286,16 +343,17 @@ def print_properties(player):
             print(f"{p}: {prop.fget(player)}")
 
 
-async def test_add_tags(player, broken_player):
+async def test_add_tags(player: Player, broken_player: Player) -> None:
     """Tests adding a tag to async_update."""
     await player.async_query("playlist", "loadtracks", "track.titlesearch=blackbird")
     assert await player.async_update(add_tags="D")
     assert not player.remote  # needs a local track for addedTime to have a value
+    assert player.current_track is not None
     assert player.current_track.get("addedTime")
     assert not await broken_player.async_update(add_tags="D")
 
 
-async def test_player_properties(player, broken_player):
+async def test_player_properties(player: Player, broken_player: Player) -> None:
     """Tests each player property."""
     await player.async_update()
     print_properties(player)
@@ -307,20 +365,20 @@ async def test_player_properties(player, broken_player):
     assert broken_player.power is None
 
 
-async def test_async_query(player):
+async def test_async_query(player: Player) -> None:
     """Tests Player.async_query()."""
     # test query with result
     result = await player.async_query("status")
+    assert result is not None and "mode" in result
     assert result["mode"] in ["play", "pause", "stop"]
     # test query with no result
-    result = await player.async_command("pause", "1")
-    assert result
+    assert await player.async_command("pause", "1")
     # test bad query
     result = await player.async_query("invalid")
     assert not result
 
 
-async def test_player_power(player, broken_player):
+async def test_player_power(player: Player, broken_player: Player) -> None:
     """Tests Player power controls."""
     assert await player.async_set_power(True)
     assert not await broken_player.async_set_power(True)
@@ -334,7 +392,7 @@ async def test_player_power(player, broken_player):
     assert player.power
 
 
-async def test_player_muting(player, broken_player):
+async def test_player_muting(player: Player, broken_player: Player) -> None:
     """Test Player muting controls."""
     assert await player.async_update()
     muting = player.muting
@@ -353,7 +411,7 @@ async def test_player_muting(player, broken_player):
     assert not await broken_player.async_set_muting(True)
 
 
-async def test_player_volume(player, broken_player):
+async def test_player_volume(player: Player, broken_player: Player) -> None:
     """Test Player volume controls."""
     assert await player.async_update()
     vol = player.volume
@@ -373,7 +431,9 @@ async def test_player_volume(player, broken_player):
     assert not await broken_player.async_set_volume(new_vol)
 
 
-async def test_player_play_pause_stop(player, broken_player, test_uris):
+async def test_player_play_pause_stop(
+    player: Player, broken_player: Player, test_uris: list[str]
+) -> None:
     """Test play and pause controls."""
     # use a local track, as some remote streams do not support pause or seek
     assert await player.async_load_url(test_uris[0], cmd="load")
@@ -416,7 +476,9 @@ async def test_player_play_pause_stop(player, broken_player, test_uris):
     assert not await player.async_time(5)
 
 
-async def test_player_load_url_and_index(player, broken_player, test_uris):
+async def test_player_load_url_and_index(
+    player: Player, broken_player: Player, test_uris: list[str]
+) -> None:
     """Test loading and unloading playlist."""
     assert await player.async_clear_playlist()
     assert not await broken_player.async_clear_playlist()
@@ -467,7 +529,9 @@ async def test_player_load_url_and_index(player, broken_player, test_uris):
     assert player.current_track["url"] == test_uris[2]
 
 
-async def test_player_playlist(player, broken_player, test_uris):
+async def test_player_playlist(
+    player: Player, broken_player: Player, test_uris: list[str]
+) -> None:
     """Test functions for loading a playlist."""
     test_playlist = [{"url": test_uris[0]}, {"url": test_uris[1]}]
 
@@ -495,7 +559,9 @@ async def test_player_playlist(player, broken_player, test_uris):
     assert not await player.async_load_playlist(None)
 
 
-async def test_player_coverart(player, broken_player, test_album):
+async def test_player_coverart(
+    player: Player, broken_player: Player, test_album: list[str]
+) -> None:
     """Test album cover art."""
     await player.async_clear_playlist()
     await player.async_load_playlist(test_album, "add")
@@ -510,7 +576,7 @@ async def test_player_coverart(player, broken_player, test_album):
     assert "/music/unknown/cover.jpg" in broken_player.image_url
 
 
-async def test_player_shuffle(player, broken_player):
+async def test_player_shuffle(player: Player, broken_player: Player) -> None:
     """Test setting shuffle mode."""
     await player.async_update()
     shuffle_mode = player.shuffle
@@ -524,7 +590,7 @@ async def test_player_shuffle(player, broken_player):
     await player.async_set_shuffle(shuffle_mode)
 
 
-async def test_player_repeat(player, broken_player):
+async def test_player_repeat(player: Player, broken_player: Player) -> None:
     """Test setting player repeat mode."""
     await player.async_update()
     repeat_mode = player.repeat
@@ -538,10 +604,12 @@ async def test_player_repeat(player, broken_player):
     await player.async_set_repeat(repeat_mode)
 
 
-async def test_player_sync(player, other_player, broken_player):
+async def test_player_sync(
+    player: Player, other_player: Player, broken_player: Player
+) -> None:
     """Test sync functions."""
 
-    async def unsync_test(test_player):
+    async def unsync_test(test_player: Player) -> None:
         await test_player.async_unsync()
         await test_player.async_update()
         assert not test_player.synced
@@ -556,17 +624,19 @@ async def test_player_sync(player, other_player, broken_player):
 
     await player.async_sync(other_player)
     await player.async_update()
+    assert player.sync_group is not None
     await other_player.async_update()
     assert other_player.player_id in player.sync_group
+    assert other_player.sync_group is not None
     assert player.player_id in other_player.sync_group
 
     assert not await broken_player.async_sync(player)
     assert not await broken_player.async_unsync()
     with pytest.raises(RuntimeError):
-        assert await player.async_sync(None)
+        assert await player.async_sync(None)  # type: ignore
 
 
-async def test_alarms(player):
+async def test_alarms(player: Player) -> None:
     """Test alarms."""
     assert player.alarms is None
 

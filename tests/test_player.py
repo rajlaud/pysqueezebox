@@ -12,48 +12,51 @@ from pysqueezebox import Player, Server
 pytestmark = pytest.mark.asyncio
 
 
-async def test_repr():
+async def test_repr() -> None:
     """Test the string representation of a Player."""
-    test_player = Player(
-        "Fake Server", "00:11:22:33:44:55", "Test Player", {"test": "Test"}
-    )
+    mock_server = Server(None, "test")
+    test_player = Player(mock_server, "00:11:22:33:44:55", "Test Player")
     # pylint: disable=eval-used
     test_player2 = eval(repr(test_player))
     assert repr(test_player) == repr(test_player2)
 
 
-async def test_image_url():
+async def test_image_url() -> None:
     """Test creating image urls."""
-    lms = Server(None, "192.168.1.1", username="test#", password="~/.$password")
-    player = Player(lms, "00:11:22:33:44:55", "Test Player")
+    mock_server = Server(None, "192.168.1.1", username="test#", password="~/.$password")
+    player = Player(mock_server, "00:11:22:33:44:55", "Test Player")
     assert (
         player.image_url
         == "http://test%23:~%2F.%24password@192.168.1.1:9000/music/unknown/cover.jpg"
     )
 
 
-async def test_wait():
+async def test_wait() -> None:
     """Test player._wait_for_property()."""
-    with patch.object(Player, "async_update", AsyncMock()):
-        mock_player = Player(None, "00:11:22:33:44:55", "Test Player")
-        await mock_player._wait_for_property(None, None, 0)
-        mock_player.async_update.assert_not_called()
+    with patch.object(Player, "async_update", AsyncMock()) as mock_update:
+        mock_server = AsyncMock(autospec=Server)
+        mock_player = Player(mock_server, "00:11:22:33:44:55", "Test Player")
+        await mock_player._wait_for_property("player_id", "wrong one", 0)
+        mock_update.assert_not_called()
 
         assert not await mock_player._wait_for_property(
             "player_id", "55:44:33:22:11:00", 0.1
         )
-        mock_player.async_update.assert_called_once()
+        mock_update.assert_called_once()
 
 
-async def test_verified_pause():
+async def test_verified_pause() -> None:
     """Test player._verified_pause_stop."""
     with patch.object(
         Player, "async_command", AsyncMock(return_val=True)
-    ), patch.object(Player, "async_update", AsyncMock(return_val=True)), patch.object(
+    ) as mock_command, patch.object(
+        Player, "async_update", AsyncMock(return_val=True)
+    ) as mock_update, patch.object(
         Player, "mode", "play"
     ):
-        mock_player = Player(None, "11:22:33:44:55", "Test Player")
+        mock_server = AsyncMock(autospec=Server)
+        mock_player = Player(mock_server, "11:22:33:44:55", "Test Player")
         assert not await mock_player.async_pause(timeout=0.1)
         pause_args = ["pause", "1"]
-        await mock_player.async_command.has_calls([call(pause_args), call(pause_args)])
-        mock_player.async_update.assert_called()
+        mock_command.has_calls([call(pause_args), call(pause_args)])
+        mock_update.assert_called()
