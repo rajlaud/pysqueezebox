@@ -1,7 +1,11 @@
 """The pysqueezebox server discovery module."""
+
 import asyncio
 import logging
 import socket
+from typing import Any, Awaitable, Callable
+
+from aiohttp import ClientSession
 
 from .server import Server
 
@@ -12,11 +16,15 @@ DISCOVERY_MESSAGE = b"eIPAD\x00NAME\x00JSON\x00UUID\x00VERS"
 BROADCAST_ADDR = ("255.255.255.255", 3483)
 
 
-def _unpack_discovery_response(data, addr):
+def _unpack_discovery_response(
+    data: bytes, addr: tuple[str | Any, int]
+) -> dict[str, str] | None:
     """Return dict of unpacked responses from Logitech Media Server."""
     if data[0:1] != b"E":
         _LOGGER.debug(
-            "Received non-LMS discovery response %s from %s", data, addr,
+            "Received non-LMS discovery response %s from %s",
+            data,
+            addr,
         )
         _LOGGER.debug("Prefix was %s", data[0:1])
         return None
@@ -34,17 +42,21 @@ def _unpack_discovery_response(data, addr):
 class ServerDiscoveryProtocol(asyncio.DatagramProtocol):
     """Protocol to send discovery request and receive responses."""
 
-    def __init__(self, callback, session=None):
+    def __init__(
+        self,
+        callback: Awaitable[None] | Callable[[Server], None],
+        session: ClientSession | None = None,
+    ) -> None:
         """Initialize with callback function."""
-        self.transport = None
+        self.transport: asyncio.transports.BaseTransport | None = None
         self.callback = callback
         self.session = session
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: asyncio.transports.BaseTransport) -> None:
         """Connect to transport."""
         self.transport = transport
 
-    def datagram_received(self, data, addr):
+    def datagram_received(self, data: bytes, addr: tuple[str | Any, int]) -> None:
         """Test if responder is a Logitech Media Server."""
         _LOGGER.debug("Received LMS discovery response from %s", addr)
         response = _unpack_discovery_response(data, addr)
@@ -59,7 +71,7 @@ class ServerDiscoveryProtocol(asyncio.DatagramProtocol):
                     Server(
                         self.session,
                         response["host"],
-                        response["json"],
+                        int(response["json"]),
                         name=response.get("name"),
                         uuid=response.get("uuid"),
                     )
@@ -68,7 +80,10 @@ class ServerDiscoveryProtocol(asyncio.DatagramProtocol):
                     asyncio.create_task(result)
 
 
-async def async_discover(callback, session=None):
+async def async_discover(
+    callback: Awaitable[None] | Callable[[Server], None],
+    session: ClientSession | None = None,
+) -> None:
     """
     Search for Logitech Media Servers using the LMS UDP discovery protocol.
 

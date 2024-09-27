@@ -73,7 +73,7 @@ PlayerStatus = TypedDict(
         "playlist_cur_index": str,
         "playlist_loop": list[Track] | None,
         "remoteMeta": Track | None,
-        "playlist_timestamp": int,
+        "playlist_timestamp": float,
         "playlist_tracks": str,
         "playlist shuffle": int,
         "playlist repeat": int,
@@ -526,7 +526,7 @@ class Player:
 
         if (
             "playlist_timestamp" in response
-            and isinstance(response["playlist_timestamp"], int)
+            and isinstance(response["playlist_timestamp"], float)
             and "playlist_tracks" in response
             and isinstance(response["playlist_tracks"], int)
         ):
@@ -763,7 +763,9 @@ class Player:
         return await self._wait_for_property("playlist_urls", target_playlist, timeout)
 
     async def async_load_playlist(
-        self, playlist_ref: Sequence[PlaylistEntry], cmd: str = "load"
+        self,
+        playlist_ref: Sequence[PlaylistEntry],
+        cmd: str = "load",
     ) -> bool:
         """
         Play a playlist, of the sort return by the Player.playlist property.

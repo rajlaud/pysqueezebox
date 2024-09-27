@@ -384,7 +384,6 @@ class Server:
                 items = result["playlisttracks_loop"]
             else:
                 items = result[f"{category}_loop"]
-            items = result[f"{category}_loop"]
             assert isinstance(items, list)
             for item in items:
                 if query[0] == "favorites":
@@ -408,7 +407,7 @@ class Server:
                                     image_url
                                 ):
                                     item["artwork_track_id"] = track_id
-                elif query[0] not in ["playlists", "favorites"]:
+                elif query[0] != "favorites":
                     item["title"] = item.pop(category[:-1])
 
                 if "artwork_track_id" in item and isinstance(
@@ -482,18 +481,14 @@ class Server:
         return result
 
     async def async_get_category_title(
-        self, category: str, browse_id: str | int
+        self, category: str, search: str | None
     ) -> str | None:
         """
         Search of the category name corresponding to a title.
         """
-        category_list = await self.async_get_category(f"{category}s")
-        if category_list is not None:
-            result = next(
-                item for item in category_list if item["id"] == int(browse_id)
-            )
-            if result:
-                return result.get("title")
+        result = await self.async_query_category(f"{category}s", 50, search=search)
+        if result and len(result) > 0:
+            return str(result[0]["title"])
         return None
 
     def generate_image_url_from_track_id(self, track_id: int) -> str:

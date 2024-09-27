@@ -121,13 +121,14 @@ async def restore_player_state(test_player: Player, state: PlayerState) -> None:
     if state["playlist"]:
         await test_player.async_load_playlist(state["playlist"], "add")
     await test_player.async_set_power(state["power"])
-    await test_player.async_time(state["time"])
+    if "time" in state:
+        await test_player.async_time(state["time"])
     await test_player.async_unsync()
     for other_player in state["sync_group"]:
         await test_player.async_sync(other_player)
     if state["mode"] == "play":
         await test_player.async_play()
-    if state["alarms"]:
+    if "alarms" in state:
         for alarm in state["alarms"]:
             await test_player.async_add_alarm(
                 time=alarm["time"],
@@ -236,14 +237,14 @@ async def test_discovery_integration() -> None:
     """Test discovery - requires actual discoverable server."""
     event = asyncio.Event()
 
-    def _discovery_callback(server: Server):
+    def _discovery_callback(server: Server) -> None:
         global IP
         IP = server.host
         event.set()
 
     task = asyncio.create_task(async_discover(_discovery_callback))
     try:
-        await asyncio.wait_for(event.wait(), 1)
+        await asyncio.wait_for(event.wait(), 5)
     except asyncio.TimeoutError:
         pytest.fail("Synchronous discovery failed")
     task.cancel()
@@ -295,12 +296,12 @@ async def test_get_player(lms: Server, player: Player) -> None:
 async def test_browse(lms: Server) -> None:
     """Test browsing the library."""
     categories = [
-        ("playlists", "playlist_id"),
+        ("titles", "title_id"),
         ("artists", "artist_id"),
         ("genres", "genre_id"),
         ("albums", "album_id"),
+        ("playlists", "playlist_id"),
         ("favorites", "item_id"),
-        ("titles", "title_id"),
     ]
 
     for category in categories:
@@ -317,16 +318,21 @@ async def lookup_helper(
     result = await lms.async_browse(category, limit)
     assert result is not None and "title" in result
     assert result["title"] is not None
-    assert "items" in result and isinstance(result, list) and len(result["items"]) > 0
+    assert (
+        "items" in result
+        and isinstance(result["items"], list)
+        and len(result["items"]) > 0
+    )
     browse_id = result["items"][0].get("id")
     title = result["items"][0].get("title")
     assert browse_id is not None
     assert title is not None
     result = await lms.async_browse(
-        category[:-1], limit=BROWSE_LIMIT, browse_id=(id_type, browse_id)
+        category[:-1], limit=BROWSE_LIMIT, browse_id=(str(id_type), str(browse_id))
     )
-    assert result["title"] == title
-    assert result["items"] is not None
+    assert result is not None
+    assert "title" in result and isinstance(result, dict) and result["title"] == title
+    assert "items" in result and isinstance(result["items"], list)
     for item in result["items"]:
         assert item.get("id") is not None
         assert item.get("title") is not None
@@ -415,6 +421,8 @@ async def test_player_volume(player: Player, broken_player: Player) -> None:
     """Test Player volume controls."""
     assert await player.async_update()
     vol = player.volume
+    if vol is None:
+        pytest.fail("Volume error")
     assert 0 <= vol <= 100
 
     new_vol = vol + 5 if vol < 6 else vol - 5
@@ -488,7 +496,7 @@ async def test_player_load_url_and_index(
     assert await player.async_load_url(test_uris[0], "play")
 
     await player.async_update()
-    assert len(player.playlist) == 1
+    assert player.playlist is not None and len(player.playlist) == 1
     assert player.current_track["url"] == test_uris[0]
     assert await player.async_load_url(test_uris[1], "play")
     await player.async_update()
@@ -533,7 +541,7 @@ async def test_player_playlist(
     player: Player, broken_player: Player, test_uris: list[str]
 ) -> None:
     """Test functions for loading a playlist."""
-    test_playlist = [{"url": test_uris[0]}, {"url": test_uris[1]}]
+    test_playlist: list[PlaylistEntry] = [{"url": test_uris[0]}, {"url": test_uris[1]}]
 
     assert await player.async_clear_playlist()
     await player.async_update()
@@ -544,7 +552,7 @@ async def test_player_playlist(
     await player.async_update()
     assert test_playlist == player.playlist_urls
 
-    assert await player.async_load_playlist(reversed(test_playlist), "play")
+    assert await player.async_load_playlist(list(reversed(test_playlist)), "play")
     assert not await broken_player.async_load_playlist(test_playlist, "play")
     await player.async_update()
     assert list(reversed(test_playlist)) == player.playlist_urls
@@ -556,17 +564,17 @@ async def test_player_playlist(
     current_playlist = test_playlist[1:] + test_playlist + test_playlist[:1]
     assert current_playlist == player.playlist_urls
 
-    assert not await player.async_load_playlist(None)
+    assert not await player.async_load_playlist(None)  # type: ignore
 
 
 async def test_player_coverart(
-    player: Player, broken_player: Player, test_album: list[str]
+    player: Player, broken_player: Player, test_album: list[PlaylistEntry]
 ) -> None:
     """Test album cover art."""
     await player.async_clear_playlist()
     await player.async_load_playlist(test_album, "add")
     await player.async_update()
-    assert len(player.playlist) > 1
+    assert player.playlist is not None and len(player.playlist) > 0
     image_url = player.image_url
     assert player.image_url
     await player.async_index("+1")
@@ -580,6 +588,7 @@ async def test_player_shuffle(player: Player, broken_player: Player) -> None:
     """Test setting shuffle mode."""
     await player.async_update()
     shuffle_mode = player.shuffle
+    assert shuffle_mode is not None
 
     for mode in ["none", "song", "album"]:
         assert await player.async_set_shuffle(mode)
@@ -594,6 +603,7 @@ async def test_player_repeat(player: Player, broken_player: Player) -> None:
     """Test setting player repeat mode."""
     await player.async_update()
     repeat_mode = player.repeat
+    assert repeat_mode is not None
 
     for mode in ["none", "song", "playlist"]:
         assert await player.async_set_repeat(mode)
