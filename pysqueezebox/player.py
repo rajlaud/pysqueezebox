@@ -516,7 +516,7 @@ class Player:
         if self._poll and not self._poll.done():
             self._poll.cancel()
 
-        tags = "acdIKlNorTux"
+        tags = "acdIKlNorTuxQ"
         if add_tags:
             tags = "".join(set(tags + add_tags))
         response = await self.async_query("status", "-", "1", f"tags:{tags}")
