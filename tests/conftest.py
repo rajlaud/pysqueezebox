@@ -1,20 +1,11 @@
 """Common functions and fixtures for pysqueezebox tests."""
 
-import asyncio
-from collections.abc import Generator
-
 import pytest
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop]:
-    """
-    Re-scope the event loop to cover this session. Allows to use one aiohttp session
-    for all of the tests.
-    """
-    loop = asyncio.get_event_loop()
-    yield loop
-    loop.close()
+def pytest_configure(config: pytest.Config) -> None:
+    """Set the default loop scope to session."""
+    config.option.asyncio_default_fixture_loop_scope = "session"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

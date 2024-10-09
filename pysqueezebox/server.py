@@ -205,9 +205,12 @@ class Server:
         _LOGGER.error("get_player() called without name or player_id.")
         return None
 
-    async def async_status(self) -> ServerStatus | None:
+    async def async_status(self, add_tags: str | None = None) -> ServerStatus | None:
         """Return status of current server."""
-        self.status = await self.async_query("serverstatus")
+        query = ["serverstatus"]
+        if add_tags:
+            query.append(f"tags:{add_tags}")
+        self.status = await self.async_query()
         if self.status:
             if self.uuid is None and "uuid" in self.status:
                 self.uuid = self.status["uuid"]

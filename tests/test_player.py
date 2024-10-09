@@ -9,7 +9,7 @@ from pysqueezebox import Player, Server
 
 # pylint: disable=C0103
 # All test coroutines will be treated as marked.
-pytestmark = pytest.mark.asyncio
+pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
 async def test_repr() -> None:
@@ -58,5 +58,5 @@ async def test_verified_pause() -> None:
         mock_player = Player(mock_server, "11:22:33:44:55", "Test Player")
         assert not await mock_player.async_pause(timeout=0.1)
         pause_args = ["pause", "1"]
-        mock_command.has_calls([call(pause_args), call(pause_args)])
+        assert mock_command.call_args_list == [call(*pause_args), call(*pause_args)]
         mock_update.assert_called()
