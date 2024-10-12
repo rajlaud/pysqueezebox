@@ -22,10 +22,6 @@ from pysqueezebox.player import Alarm, PlaylistEntry, Track
 
 BROWSE_LIMIT = 50
 
-# pylint: disable=C0103
-# All test coroutines will be treated as marked.
-pytestmark = pytest.mark.asyncio
-
 IP = "192.168.88.3"
 REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
@@ -43,7 +39,12 @@ PlayerState = TypedDict(
 )
 
 
-@pytest.fixture(name="lms", scope="module")
+# pylint: disable=C0103
+# All test coroutines will be treated as marked.
+pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(name="lms", scope="session")
 async def fixture_lms(
     request: pytest.FixtureRequest,
 ) -> AsyncGenerator[Server]:
@@ -63,7 +64,7 @@ async def fixture_lms(
         yield server
 
 
-@pytest.fixture(name="players", scope="module")
+@pytest.fixture(name="players", scope="session")
 async def fixture_players(lms: Server, request: pytest.FixtureRequest) -> list[Player]:
     """Return list of players."""
     players = await lms.async_get_players()
@@ -139,7 +140,7 @@ async def restore_player_state(test_player: Player, state: PlayerState) -> None:
             )
 
 
-@pytest.fixture(name="player", scope="module")
+@pytest.fixture(name="player", scope="session")
 async def fixture_player(players: list[Player]) -> AsyncGenerator[Player]:
     """Return a working Player object."""
     if len(players) < 1:
@@ -161,7 +162,7 @@ async def fixture_player(players: list[Player]) -> AsyncGenerator[Player]:
     await restore_player_state(test_player, state)
 
 
-@pytest.fixture(name="other_player", scope="module")
+@pytest.fixture(name="other_player", scope="session")
 async def fixture_other_player(players: list[Player]) -> AsyncGenerator[Player]:
     """Return a second working Player object."""
     if len(players) < 2:
@@ -177,7 +178,7 @@ async def fixture_other_player(players: list[Player]) -> AsyncGenerator[Player]:
     await restore_player_state(test_player, state)
 
 
-@pytest.fixture(name="broken_player", scope="module")
+@pytest.fixture(name="broken_player", scope="session")
 async def broken_player_fixture(lms: Server) -> AsyncGenerator[Player]:
     """Return a Player that does not work."""
     broken_player = Player(lms, "NOT A PLAYER ID", "Bogus player")
@@ -185,7 +186,7 @@ async def broken_player_fixture(lms: Server) -> AsyncGenerator[Player]:
     yield broken_player
 
 
-@pytest.fixture(name="test_uris", scope="module")
+@pytest.fixture(name="test_uris", scope="session")
 async def fixture_test_uris(player: Player) -> list[str]:
     """Return the first three songs in the database to use in playlist tests."""
     result = await player.async_query("songs", "0", "4", "search:Beatles", "tags:u")
@@ -202,7 +203,7 @@ async def fixture_test_uris(player: Player) -> list[str]:
     return test_uris
 
 
-@pytest.fixture(name="test_album", scope="module")
+@pytest.fixture(name="test_album", scope="session")
 async def fixture_test_album(player: Player) -> list[PlaylistEntry]:
     """Return the first album in the database with multiple coverart tracks to use in
     album art test."""
@@ -253,7 +254,9 @@ async def test_discovery_integration() -> None:
 
 async def test_server_status(lms: Server) -> None:
     """Test server.async_status() method."""
-    print(await lms.async_status())
+    status = await lms.async_status("prefs:groupdiscs")
+    assert status is not None
+    assert "groupdiscs" in status and status["groupdiscs"] in ["0", "1"]
     assert lms.uuid is not None  # should be set by async_status()
 
 

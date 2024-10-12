@@ -205,14 +205,23 @@ class Server:
         _LOGGER.error("get_player() called without name or player_id.")
         return None
 
-    async def async_status(self) -> ServerStatus | None:
-        """Return status of current server."""
-        self.status = await self.async_query("serverstatus")
+    async def async_status(self, *args: str) -> ServerStatus | dict[str, Any] | None:
+        """
+        Return status of current server.
+
+        Without extra parameters the response will have type ServerStatus.
+
+        Extra tagged parameters are added to the response dictionary.
+        """
+        query = ["serverstatus", "-", "-"]
+        if len(args) > 0:
+            query += args
+        self.status = await self.async_query(*query)
         if self.status:
             if self.uuid is None and "uuid" in self.status:
                 self.uuid = self.status["uuid"]
         # todo: add validation
-        return self.status  # type: ignore
+        return self.status
 
     async def async_command(self, *command: str, player: str = "") -> bool:
         """Send a command to the JSON-RPC connection where no result is returned."""
