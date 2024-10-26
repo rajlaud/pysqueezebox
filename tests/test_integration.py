@@ -16,17 +16,14 @@ from typing import TypedDict
 
 import aiohttp
 import pytest
+import pytest_asyncio
 
 from pysqueezebox import Player, Server, async_discover
 from pysqueezebox.player import Alarm, PlaylistEntry, Track
 
 BROWSE_LIMIT = 50
 
-# pylint: disable=C0103
-# All test coroutines will be treated as marked.
-pytestmark = pytest.mark.asyncio
-
-IP = "192.168.88.3"
+IP = "10.66.66.7"
 REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
 PlayerState = TypedDict(
@@ -42,8 +39,10 @@ PlayerState = TypedDict(
     total=False,
 )
 
+pytestmark = pytest.mark.asyncio(loop_scope="module")
 
-@pytest.fixture(name="lms", scope="module")
+
+@pytest_asyncio.fixture(name="lms", loop_scope="module", scope="module")
 async def fixture_lms(
     request: pytest.FixtureRequest,
 ) -> AsyncGenerator[Server]:
@@ -253,7 +252,9 @@ async def test_discovery_integration() -> None:
 
 async def test_server_status(lms: Server) -> None:
     """Test server.async_status() method."""
-    print(await lms.async_status())
+    status = await lms.async_status("prefs:groupdiscs")
+    assert status is not None
+    assert "groupdiscs" in status and status["groupdiscs"] in ["0", "1"]
     assert lms.uuid is not None  # should be set by async_status()
 
 
@@ -302,6 +303,7 @@ async def test_browse(lms: Server) -> None:
         ("albums", "album_id"),
         ("playlists", "playlist_id"),
         ("favorites", "item_id"),
+        ("new music", "album_id"),
     ]
 
     for category in categories:
@@ -327,8 +329,9 @@ async def lookup_helper(
     title = result["items"][0].get("title")
     assert browse_id is not None
     assert title is not None
+    subcategory = category[:-1] if category != "new music" else "album"
     result = await lms.async_browse(
-        category[:-1], limit=BROWSE_LIMIT, browse_id=(str(id_type), str(browse_id))
+        subcategory, limit=BROWSE_LIMIT, browse_id=(str(id_type), str(browse_id))
     )
     assert result is not None
     assert "title" in result and isinstance(result, dict) and result["title"] == title

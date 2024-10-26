@@ -57,6 +57,7 @@ async def test_verified_pause() -> None:
         mock_server = AsyncMock(autospec=Server)
         mock_player = Player(mock_server, "11:22:33:44:55", "Test Player")
         assert not await mock_player.async_pause(timeout=0.1)
-        pause_args = ["pause", "1"]
-        mock_command.has_calls([call(pause_args), call(pause_args)])
+        mock_command.assert_has_calls(
+            [call("pause", "1"), call("pause", "1")], any_order=True
+        )
         mock_update.assert_called()
