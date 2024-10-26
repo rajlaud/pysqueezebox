@@ -205,14 +205,23 @@ class Server:
         _LOGGER.error("get_player() called without name or player_id.")
         return None
 
-    async def async_status(self) -> ServerStatus | None:
-        """Return status of current server."""
-        self.status = await self.async_query("serverstatus")
+    async def async_status(self, *args: str) -> ServerStatus | dict[str, Any] | None:
+        """
+        Return status of current server.
+
+        Without extra parameters the response will have type ServerStatus.
+
+        Extra tagged parameters are added to the response dictionary.
+        """
+        query = ["serverstatus", "-", "-"]
+        if len(args) > 0:
+            query += args
+        self.status = await self.async_query(*query)
         if self.status:
             if self.uuid is None and "uuid" in self.status:
                 self.uuid = self.status["uuid"]
         # todo: add validation
-        return self.status  # type: ignore
+        return self.status
 
     async def async_command(self, *command: str, player: str = "") -> bool:
         """Send a command to the JSON-RPC connection where no result is returned."""
@@ -280,6 +289,7 @@ class Server:
         category: str,
         limit: int | None = None,
         browse_id: tuple[str, str] | None = None,
+        player_id: str | None = None,
     ) -> QueryResult | None:
         """
         Browse the music library.
@@ -293,7 +303,7 @@ class Server:
 
         Parameters:
             category: one of playlists, playlist, albums, album, artists, artist, titles,
-              genres, genre, favorites, favorite, new music
+              genres, genre, favorites, favorite, new music, apps, app, app-cmd
             limit (optional): set maximum number of results
             browse_id (optional): tuple of id type and value
               id type: "album_id", "artist_id", "genre_id", or "track_id"
@@ -302,11 +312,19 @@ class Server:
         browse: dict[str, Any] = {}
         search = f"{browse_id[0]}:{browse_id[1]}" if browse_id else None
 
+        app = False
+        if category[:4] == "app-":
+            # The category is an app
+            app = True
+
         if (
             category in ["playlist", "album", "artist", "genre", "title", "favorite"]
-            and search
-        ):
-            browse["title"] = await self.async_get_category_title(category, search)
+        ) and search:
+            browse["title"] = await self.async_get_category_title(
+                category, search, player_id=player_id
+            )
+        elif app:
+            browse["title"] = category[4:].title()
         else:
             browse["title"] = category.title()
 
@@ -319,7 +337,9 @@ class Server:
         else:
             item_type = category
 
-        items = await self.async_get_category(item_type, limit, search)
+        items = await self.async_get_category(
+            item_type, limit, search, player_id=player_id
+        )
 
         browse["items"] = items
         if category == "title" and items is not None:
@@ -328,8 +348,14 @@ class Server:
 
     async def async_get_count(self, category: str) -> int:
         """Return number of category in database."""
-        query = [category]
-        if category == "favorites":
+        if category[:4] == "app-":
+            # The category is an app
+            app = True
+            query = [category[4:]]
+        else:
+            app = False
+            query = [category]
+        if (category in ["favorites"]) or app:
             query.append("items")
         query.extend(["0", "1"])
         if category == "new music":
@@ -340,7 +366,11 @@ class Server:
         return 0
 
     async def async_query_category(
-        self, category: str, limit: int | None = None, search: str | None = None
+        self,
+        category: str,
+        limit: int | None = None,
+        search: str | None = None,
+        player_id: str | None = None,
     ) -> list[QueryResult] | None:
         """Return list of entries in category, optionally filtered by search string."""
         if not limit:
@@ -350,12 +380,18 @@ class Server:
             # workaround LMS bug - playlist_id doesn't work for "titles" search
             query = ["playlists", "tracks", "0", f"{limit}", search]
             query.append("tags:ju")
-        elif search and "item_id" in search:
+        elif search and category in ["favorite", "favorites"]:
             # we have to look up favorites separately
             query = ["favorites", "items", "0", f"{limit}", search]
+        elif search and category[:4] == "app-":
+            # we have to look up favorites separately
+            query = [category[4:], "items", "0", f"{limit}", search]
         else:
             if category in ["favorite", "favorites"]:
                 query = ["favorites", "items"]
+            elif category[:4] == "app-":
+                # query = ["apps", "items"]
+                query = [category[4:], "items"]
             else:
                 query = [category]
             query.extend(["0", f"{limit}"])
@@ -368,14 +404,15 @@ class Server:
         elif query[0] == "titles":
             query.append("sort:albumtrack")
             query.append("tags:ju")
-        elif query[0] == "favorites":
+        elif (query[0] in ["favorites"]) or category[:4] == "app-":
             query.append("want_url:1")
         elif query[0] == "new music":
             query[0] = "albums"
             query.append("tags:jla")
             query.append("sort:new")
 
-        result = await self.async_query(*query)
+        result = await self.async_query(*query, player=player_id)
+
         if not result or "count" not in result or not isinstance(result["count"], int):
             return None
 
@@ -384,8 +421,13 @@ class Server:
 
         items = None
         try:
-            if query[0] == "favorites":
+            if query[0] in ["favorites"] or category[:4] == "app-":
                 items = result["loop_loop"]  # strange, but what LMS returns
+            elif category == "apps":
+                items = result["appss_loop"]  # strange, but what LMS returns
+            elif category == "radios":
+                items = result["radioss_loop"]  # strange, but what LMS returns
+
             elif category == "titles" and query[0] == "playlists":
                 items = result["playlisttracks_loop"]
             elif category == "new music":
@@ -394,9 +436,10 @@ class Server:
                 items = result[f"{category}_loop"]
             assert isinstance(items, list)
             for item in items:
-                if query[0] == "favorites":
+                if query[0] in ["favorites"]:
                     if item["isaudio"] != 1 and item["hasitems"] != 1:
                         continue
+
                     item["title"] = item.pop("name")
                     if (
                         "url" in item
@@ -415,7 +458,27 @@ class Server:
                                     image_url
                                 ):
                                     item["artwork_track_id"] = track_id
-                elif query[0] != "favorites":
+                elif category[:4] == "app-":
+                    if item["isaudio"] != 1 and item["hasitems"] != 1:
+                        continue
+
+                    item["title"] = item.pop("name")
+                    if "image" in item:
+                        image = item.pop("image")
+                        if isinstance(image, str):
+                            if image_url := self.generate_image_url(image):
+                                item["image_url"] = image_url
+                                if track_id := self.get_track_id_from_image_url(
+                                    image_url
+                                ):
+                                    item["artwork_track_id"] = track_id
+                elif query[0] in ["apps", "radios"]:
+                    if item.get("cmd"):  # This is the list of Apps
+                        item["title"] = item.pop("name")
+                elif (
+                    query[0] not in ["favorites", "apps", "radios"]
+                    and category[:4] != "app-"
+                ):
                     item["title"] = (
                         item.pop(category[:-1])
                         if category != "new music"
@@ -429,6 +492,7 @@ class Server:
                         item["artwork_track_id"]
                     ):
                         item["image_url"] = image_url
+
             return items
 
         except KeyError:
@@ -441,14 +505,20 @@ class Server:
         return None
 
     async def async_get_category(
-        self, category: str, limit: int | None = None, search: str | None = None
+        self,
+        category: str,
+        limit: int | None = None,
+        search: str | None = None,
+        player_id: str | None = None,
     ) -> list[dict[str, Any]] | None:
         """Update cache of library category if needed and return result."""
         if (
             category not in ["artists", "albums", "titles", "genres", "new music"]
             or search is not None
         ):
-            return await self.async_query_category(category, limit, search)
+            return await self.async_query_category(
+                category, limit, search, player_id=player_id
+            )
 
         status = await self.async_status()
         if status is None:
@@ -479,7 +549,9 @@ class Server:
             )
         else:
             _LOGGER.debug("Category %s not set", category)
-        result = await self.async_query_category(category, limit=limit)
+        result = await self.async_query_category(
+            category, limit=limit, player_id=player_id
+        )
         status = await self.async_status()
 
         # only save useful results where library has lastscan value
@@ -493,12 +565,20 @@ class Server:
         return result
 
     async def async_get_category_title(
-        self, category: str, search: str | None
+        self, category: str, search: str | None, player_id: str | None = None
     ) -> str | None:
         """
         Search of the category name corresponding to a title.
         """
-        result = await self.async_query_category(f"{category}s", 50, search=search)
+        if category[:4] == "app-":
+            result = await self.async_query_category(
+                category, 50, search=search, player_id=player_id
+            )
+        else:
+            result = await self.async_query_category(
+                f"{category}s", 50, search=search, player_id=player_id
+            )
+
         if result and len(result) > 0:
             return str(result[0]["title"])
         return None

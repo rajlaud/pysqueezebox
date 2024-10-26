@@ -1015,8 +1015,14 @@ class Player:
 
         See Server.async_browse for parameters.
         """
-        return await self._lms.async_browse(category, limit=limit, browse_id=browse_id)
+        return await self._lms.async_browse(
+            category, limit=limit, browse_id=browse_id, player_id=self._id
+        )
 
     def generate_image_url_from_track_id(self, track_id: int) -> str:
         """Return the image url for a track_id."""
         return self._lms.generate_image_url_from_track_id(track_id)
+
+    def generate_image_url(self, image_url: str) -> str:
+        """Return the image url."""
+        return self._lms.generate_image_url(image_url)
