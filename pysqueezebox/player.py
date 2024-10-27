@@ -785,14 +785,21 @@ class Player:
 
         if cmd == "insert":
             for item in reversed(playlist):
+                if not item.get("url"):
+                    continue
                 if not await self.async_load_url(item["url"], cmd):
                     success = False
             return success
 
         if cmd in ["play", "load"]:
-            if not await self.async_load_url(playlist.pop(0)["url"], "play"):
+            _item = playlist.pop(0)
+            if not _item.get("url") or not await self.async_load_url(
+                _item["url"], "play"
+            ):
                 success = False
         for item in playlist:
+            if not item.get("url"):
+                continue
             if not await self.async_load_url(item["url"], "add"):
                 success = False
         return success

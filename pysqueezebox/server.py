@@ -241,7 +241,7 @@ class Server:
         query_data = json.dumps(
             {"id": "1", "method": "slim.request", "params": [player, command]}
         )
-
+        #####
         _LOGGER.debug("URL: %s Data: %s", url, query_data)
 
         if self.session is None:
@@ -380,12 +380,13 @@ class Server:
             # workaround LMS bug - playlist_id doesn't work for "titles" search
             query = ["playlists", "tracks", "0", f"{limit}", search]
             query.append("tags:ju")
-        elif search and category in ["favorite", "favorites"]:
+        elif search and category[:4] == "app-":
+            # we have to look up apps separately
+            query = [category[4:], "items", "0", f"{limit}", search]
+        elif search and "item_id" in search:
             # we have to look up favorites separately
             query = ["favorites", "items", "0", f"{limit}", search]
-        elif search and category[:4] == "app-":
-            # we have to look up favorites separately
-            query = [category[4:], "items", "0", f"{limit}", search]
+
         else:
             if category in ["favorite", "favorites"]:
                 query = ["favorites", "items"]
@@ -462,7 +463,10 @@ class Server:
                     if item["isaudio"] != 1 and item["hasitems"] != 1:
                         continue
 
-                    item["title"] = item.pop("name")
+                    if "name" in item:
+                        item["title"] = item.pop("name")
+                    else:
+                        item["title"] = "Unknown"
                     if "image" in item:
                         image = item.pop("image")
                         if isinstance(image, str):
