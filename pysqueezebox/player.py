@@ -971,6 +971,14 @@ class Player:
             return False
         return await self._wait_for_property("playlist", None, timeout)
 
+    async def async_play_announcement(self, media_id: str) -> bool:
+        """Play announcement url."""
+        if not await self.async_command("playlist", "play", media_id, "Announcement"):
+            return False
+        await self.async_set_repeat("none")
+
+        return await self._wait_for_property("mode", "stop", 120)
+
     async def async_sync(
         self, other_player: "Player" | str, timeout: float = TIMEOUT
     ) -> bool:
