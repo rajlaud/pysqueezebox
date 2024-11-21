@@ -133,6 +133,7 @@ class Player:
         name: str,
         status: PlayerStatus | None = None,
         model: str | None = None,
+        announce_volume: int | None = None,
     ):
         """
         Initialize the SqueezeBox device.
@@ -151,9 +152,11 @@ class Player:
         self._playlist_tags: set[str] = set()
         self._name = name
         self._model = model
+        self._announce_volume = announce_volume
 
         self._property_futures: list[dict[str, Any]] = []
         self._poll: asyncio.Task[Any] | None = None
+        self._saved_state: dict[str, Any] | None = None
 
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
 
@@ -216,6 +219,11 @@ class Player:
         if "mixer volume" in self._status:
             return abs(int(self._status["mixer volume"]))
         return None
+
+    @property
+    def announce_volume(self) -> int | None:
+        """Return volume level for announcements."""
+        return self._announce_volume
 
     @property
     def muting(self) -> bool:
@@ -613,6 +621,10 @@ class Player:
             return False
         return await self._wait_for_property("volume", target_volume, timeout)
 
+    def set_announce_volume(self, volume: int | None) -> None:
+        """Set the volume level for announcements."""
+        self._announce_volume = volume
+
     async def async_set_muting(self, mute: bool, timeout: float = TIMEOUT) -> bool:
         """Mute (true) or unmute (false) squeezebox."""
         mute_numeric = "1" if mute else "0"
@@ -730,7 +742,10 @@ class Player:
         return await self._wait_for_property("power", power, timeout)
 
     async def async_load_url(
-        self, url: str, cmd: str = "load", timeout: float = TIMEOUT
+        self,
+        url: str,
+        cmd: str = "load",
+        timeout: float = TIMEOUT,
     ) -> bool:
         """
         Play a specific track by url.
@@ -739,8 +754,12 @@ class Player:
         cmd: "play_now" - adds to current spot in playlist
         cmd: "insert" - adds next in playlist
         cmd: "add" - adds to end of playlist
+        cmd: "announce" - interrupts the current playlist then resumes it after this track
         """
         index = self.current_index or 0
+
+        if cmd == "announce":
+            await self.async_save_player_state()
 
         if cmd in ["play_now", "insert", "add"] and self.playlist_urls:
             await self.async_update()
@@ -760,7 +779,15 @@ class Player:
         else:
             if not await self.async_command("playlist", cmd, url):
                 return False
-        return await self._wait_for_property("playlist_urls", target_playlist, timeout)
+
+        result = await self._wait_for_property(
+            "playlist_urls", target_playlist, timeout
+        )
+
+        if cmd == "announce":
+            await self.async_restore_player_state()
+
+        return result
 
     async def async_load_playlist(
         self,
@@ -775,9 +802,13 @@ class Player:
         cmd: "play" or "load" - replace current playlist (default)
         cmd: "insert" - adds next in playlist
         cmd: "add" - adds to end of playlist
+        cmd: "announce" - interrupts the current playlist then resumes it after this playlist
         """
         if not playlist_ref:
             return False
+
+        if cmd == "announce":
+            await self.async_save_player_state()
 
         success = True
         # we are going to pop the list below, so we need to copy it
@@ -795,6 +826,10 @@ class Player:
         for item in playlist:
             if not await self.async_load_url(item["url"], "add"):
                 success = False
+
+        if cmd == "announce":
+            await self.async_restore_player_state()
+
         return success
 
     async def async_add_alarm(
@@ -1020,3 +1055,39 @@ class Player:
     def generate_image_url_from_track_id(self, track_id: int) -> str:
         """Return the image url for a track_id."""
         return self._lms.generate_image_url_from_track_id(track_id)
+
+    async def async_save_player_state(self) -> None:
+        """Save the current player state for later restoration."""
+        self._saved_state = {
+            "time": self.time,
+            "mode": self.mode,
+            "power": self.power,
+            "mixer_volume": self.volume,
+        }
+        await self.async_command(
+            "playlist",
+            "save",
+            f"tempplaylist_{self.player_id.replace(":","")}",
+        )
+
+    async def async_restore_player_state(self) -> None:
+        """Restore the player state to the saved state."""
+        if not self._saved_state:
+            _LOGGER.debug("No saved state to restore")
+            return
+
+        await self.async_command(
+            "playlist",
+            "resume",
+            f"tempplaylist_{self.player_id.replace(":", "")}",
+            f"noplay:{0 if self._saved_state["mode"] == "play" else 1}",
+            "wipePlaylist",
+        )
+
+        await self.async_set_repeat(self._saved_state["repeat"])
+        await self.async_set_shuffle(self._saved_state["shuffle"])
+        await self.async_set_volume(self._saved_state["mixer_volume"])
+        await self.async_time(self._saved_state["time"])
+        await self.async_set_power(self._saved_state["power"])
+
+        self._saved_state = None
