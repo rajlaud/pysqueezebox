@@ -780,28 +780,32 @@ class Player:
             return False
 
         success = True
+
         # we are going to pop the list below, so we need to copy it
         playlist = list(playlist_ref)
 
+        # remove non-playable items from the playlist
+        for item in playlist:
+            if not item.get("url"):
+                playlist.remove(item)
+
         if cmd == "insert":
             for item in reversed(playlist):
-                if not item.get("url"):
-                    continue
                 if not await self.async_load_url(item["url"], cmd):
                     success = False
             return success
 
         if cmd in ["play", "load"]:
             _item = playlist.pop(0)
-            if not _item.get("url") or not await self.async_load_url(
+            if not await self.async_load_url(
                 _item["url"], "play"
             ):
                 success = False
+
         for item in playlist:
-            if not item.get("url"):
-                continue
             if not await self.async_load_url(item["url"], "add"):
                 success = False
+
         return success
 
     async def async_add_alarm(
