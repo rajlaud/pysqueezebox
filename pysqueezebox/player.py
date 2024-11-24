@@ -811,8 +811,14 @@ class Player:
             await self.async_save_player_state()
 
         success = True
+
         # we are going to pop the list below, so we need to copy it
         playlist = list(playlist_ref)
+
+        # remove non-playable items from the playlist
+        for item in playlist:
+            if not item.get("url"):
+                playlist.remove(item)
 
         if cmd == "insert":
             for item in reversed(playlist):
@@ -823,13 +829,14 @@ class Player:
         if cmd in ["play", "load"]:
             if not await self.async_load_url(playlist.pop(0)["url"], "play"):
                 success = False
+
         for item in playlist:
             if not await self.async_load_url(item["url"], "add"):
                 success = False
 
         if cmd == "announce":
             await self.async_restore_player_state()
-
+            
         return success
 
     async def async_add_alarm(
@@ -1050,11 +1057,17 @@ class Player:
 
         See Server.async_browse for parameters.
         """
-        return await self._lms.async_browse(category, limit=limit, browse_id=browse_id)
+        return await self._lms.async_browse(
+            category, limit=limit, browse_id=browse_id, player_id=self._id
+        )
 
     def generate_image_url_from_track_id(self, track_id: int) -> str:
         """Return the image url for a track_id."""
         return self._lms.generate_image_url_from_track_id(track_id)
+
+    def generate_image_url(self, image_url: str) -> str:
+        """Return the image url."""
+        return self._lms.generate_image_url(image_url)
 
     async def async_save_player_state(self) -> None:
         """Save the current player state for later restoration."""
