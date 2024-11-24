@@ -796,10 +796,7 @@ class Player:
             return success
 
         if cmd in ["play", "load"]:
-            _item = playlist.pop(0)
-            if not await self.async_load_url(
-                _item["url"], "play"
-            ):
+            if not await self.async_load_url(playlist.pop(0)["url"], "play"):
                 success = False
 
         for item in playlist:
