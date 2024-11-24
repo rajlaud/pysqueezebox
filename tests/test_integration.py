@@ -658,12 +658,16 @@ async def test_alarms(player: Player) -> None:
     await player.async_update()
     assert player.alarms is not None
     assert len(player.alarms) == 1
+    assert player.alarm_next == 0
+    assert player.alarm_state == "none"
     assert player.alarms[0]["time"] == time
     assert player.alarms[0]["enabled"] is False
     assert player.alarms[0]["id"] == alarm_id
 
     await player.async_update_alarm(alarm_id, enabled=True)
     await player.async_update()
+    assert player.alarm_next != 0
+    assert player.alarm_state == "set"
     assert player.alarms is not None
     assert len(player.alarms) == 1
     assert player.alarms[0]["enabled"] is True

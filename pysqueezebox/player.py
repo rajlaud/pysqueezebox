@@ -62,6 +62,8 @@ AlarmJSON = TypedDict(
 PlayerStatus = TypedDict(
     "PlayerStatus",
     {
+        "alarm_next": int,
+        "alarm_state": str,
         "player_connected": int,
         "power": int,
         "mode": str,
@@ -428,6 +430,16 @@ class Player:
         return None
 
     @property
+    def alarm_state(self) -> str | None:
+        """Return the current alarm state"""
+        return self._status.get("alarm_state")
+
+    @property
+    def alarm_next(self) -> int | None:
+        """Return the time stamp of the next alarm (seconds since the epoch)"""
+        return self._status.get("alarm_next")
+
+    @property
     def playlist_urls(self) -> list[PlaylistEntry] | None:
         """Return only the urls of the current playlist. Useful for comparing playlists."""
         if not self.playlist:
@@ -527,7 +539,7 @@ class Player:
         tags = "acdIKlNorTuxQ"
         if add_tags:
             tags = "".join(set(tags + add_tags))
-        response = await self.async_query("status", "-", "1", f"tags:{tags}")
+        response = await self.async_query("status", "-", "1", f"tags:{tags}", "alarmData:1")
 
         if response is None:
             return False
