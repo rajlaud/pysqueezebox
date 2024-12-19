@@ -1092,7 +1092,7 @@ class Player:
         await self.async_command(
             "playlist",
             "save",
-            f"tempplaylist_{self.player_id.replace(":","")}",
+            f"tempplaylist_{self.player_id.replace(':','')}",
         )
 
     async def async_restore_player_state(self) -> None:
@@ -1104,8 +1104,8 @@ class Player:
         await self.async_command(
             "playlist",
             "resume",
-            f"tempplaylist_{self.player_id.replace(":", "")}",
-            f"noplay:{0 if self._saved_state["mode"] == "play" else 1}",
+            f"tempplaylist_{self.player_id.replace(':', '')}",
+            f"noplay:{0 if self._saved_state['mode'] == 'play' else 1}",
             "wipePlaylist",
         )
 
