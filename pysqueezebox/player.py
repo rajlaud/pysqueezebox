@@ -223,6 +223,11 @@ class Player:
         return self._firmware
 
     @property
+    def creator(self) -> str | None:
+        """Return the players creators if availble"""
+        return self._creator
+
+    @property
     def connected(self) -> bool:
         """
         Return True if the player is connected to the LMS server.
