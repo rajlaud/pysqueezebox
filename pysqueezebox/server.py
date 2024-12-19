@@ -591,7 +591,10 @@ class Server:
         """Generate an image url using a track id."""
         return self.generate_image_url(f"/music/{track_id}/cover.jpg")
 
-    def generate_image_url(self, image_url: str) -> str:
+    def  generate_image_url(self, image_url: str) -> str:
+        return self.generate_url(image_url)
+
+    def generate_url(self, image_url: str) -> str:
         """Add the appropriate base_url to a relative image_url."""
         base_url = f"{self._prefix}://"
         if self._username and self._password:
