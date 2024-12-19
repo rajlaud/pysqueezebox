@@ -135,31 +135,24 @@ class Server:
 
             assert isinstance(player["playerid"], str)
             assert isinstance(player["name"], str)
-            if "modelname" in player:
-                assert isinstance(player["modelname"], str)
-                model = player["modelname"]
-            else:
-                model = None
+            _model=player["modelname"] if "modelname" in player else None
+            _model_type=player["model"] if "model" in player else None
+            _firmware=player["firmware"] if "firmware" in player and player["firmware"] != 0 else None
 
             if search:
-                if search.lower() in player["name"].lower():
-                    players.append(
-                        Player(
-                            self,
-                            player["playerid"],
-                            player["name"],
-                            model=model,
-                        )
-                    )
-            else:
-                players.append(
-                    Player(
-                        self,
-                        player["playerid"],
-                        player["name"],
-                        model=model,
-                    )
+                if search.lower() not in player["name"].lower():
+                    continue
+
+            players.append(
+                Player(
+                    self,
+                    player["playerid"],
+                    player["name"],
+                    model=_model,
+                    model_type=_model_type,
+                    firmware=_firmware,
                 )
+            )
         _LOGGER.debug("get_players(%s) returning players: %s", search, players)
         return players
 
@@ -592,6 +585,9 @@ class Server:
         return self.generate_image_url(f"/music/{track_id}/cover.jpg")
 
     def generate_image_url(self, image_url: str) -> str:
+        return self.generate_url(image_url)
+
+    def generate_url(self, image_url: str) -> str:
         """Add the appropriate base_url to a relative image_url."""
         base_url = f"{self._prefix}://"
         if self._username and self._password:
