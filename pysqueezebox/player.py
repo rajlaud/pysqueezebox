@@ -219,12 +219,12 @@ class Player:
 
     @property
     def firmware(self) -> str | None:
-        """Return the players firmware version if availble"""
+        """Return the players firmware version if available"""
         return self._firmware
 
     @property
     def creator(self) -> str | None:
-        """Return the players creators if availble"""
+        """Return the players creators if available"""
         return self._creator
 
     @property
