@@ -135,6 +135,8 @@ class Player:
         name: str,
         status: PlayerStatus | None = None,
         model: str | None = None,
+        model_type: str | None = None,
+        firmware: str | None = None,
         announce_volume: int | None = None,
     ):
         """
@@ -154,12 +156,41 @@ class Player:
         self._playlist_tags: set[str] = set()
         self._name = name
         self._model = model
+        self._model_type = model_type
+        self._firmware = firmware
         self._announce_volume = announce_volume
 
         self._property_futures: list[dict[str, Any]] = []
         self._poll: asyncio.Task[Any] | None = None
         self._saved_state: dict[str, Any] | None = None
 
+        _creator = None
+        _squeezelite = ", Adrian Smith & Ralph Irving"
+        if model == "SqueezePlayer":
+            _creator = "Stefan Hansel"
+        elif model == "Squeezelite-X":
+            _creator = "R G Dawson"
+        elif model == "SqueezeLite" or "SqueezePlay" in model:
+            _creator = "Adrian Smith & Ralph Irving"
+            _squeezelite = ""
+        elif model == "SqueezeLite-HA-Addon":
+            _creator = "pssc"
+        elif model == "RaopBridge" or model == "CastBridge":
+            _creator = "philippe"
+        elif model == "SB Player":
+            _creator = "Wayne Tam"
+        elif (
+            "Squeezebox" in model
+            or "Transporter" in model
+            or "Slim" in model
+            or "Jive" in model
+        ):
+            _creator = "Logitech"
+
+        if model_type == "squeezelite":
+            _creator = _creator + _squeezelite
+
+        self._creator = _creator
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
 
     def __repr__(self) -> str:
@@ -180,6 +211,21 @@ class Player:
     def model(self) -> str | None:
         """Return the players model name, e.g. Squeezebox Boom"""
         return self._model
+
+    @property
+    def model_type(self) -> str | None:
+        """Return the players model type, e.g. baby"""
+        return self._model_type
+
+    @property
+    def firmware(self) -> str | None:
+        """Return the players firmware version if available"""
+        return self._firmware
+
+    @property
+    def creator(self) -> str | None:
+        """Return the players creators if available"""
+        return self._creator
 
     @property
     def connected(self) -> bool:
@@ -539,7 +585,9 @@ class Player:
         tags = "acdIKlNorTuxQ"
         if add_tags:
             tags = "".join(set(tags + add_tags))
-        response = await self.async_query("status", "-", "1", f"tags:{tags}", "alarmData:1")
+        response = await self.async_query(
+            "status", "-", "1", f"tags:{tags}", "alarmData:1"
+        )
 
         if response is None:
             return False
@@ -848,7 +896,7 @@ class Player:
 
         if cmd == "announce":
             await self.async_restore_player_state()
-            
+
         return success
 
     async def async_add_alarm(
