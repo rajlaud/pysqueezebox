@@ -166,7 +166,10 @@ class Player:
 
         _creator = None
         _squeezelite = ", Adrian Smith & Ralph Irving"
-        if model == "SqueezePlayer":
+        if model is None:
+            # make typing happy
+            pass
+        elif model == "SqueezePlayer":
             _creator = "Stefan Hansel"
         elif model == "Squeezelite-X":
             _creator = "R G Dawson"
@@ -188,7 +191,7 @@ class Player:
             _creator = "Logitech"
 
         if model_type == "squeezelite":
-            _creator = _creator + _squeezelite
+            _creator = str(_creator) + _squeezelite
 
         self._creator = _creator
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
@@ -219,12 +222,12 @@ class Player:
 
     @property
     def firmware(self) -> str | None:
-        """Return the players firmware version if available"""
+        """Return the player's firmware version if available"""
         return self._firmware
 
     @property
     def creator(self) -> str | None:
-        """Return the players creators if available"""
+        """Return the player's creator if available"""
         return self._creator
 
     @property

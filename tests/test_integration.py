@@ -23,7 +23,7 @@ from pysqueezebox.player import Alarm, PlaylistEntry, Track
 
 BROWSE_LIMIT = 50
 
-IP = "10.66.66.7"
+IP = "localhost"
 REMOTE_STREAM = "https://stream.wbez.org/wbez128-tunein.mp3"
 
 PlayerState = TypedDict(
@@ -187,7 +187,7 @@ async def broken_player_fixture(lms: Server) -> AsyncGenerator[Player]:
 @pytest.fixture(name="test_uris", scope="module")
 async def fixture_test_uris(player: Player) -> list[str]:
     """Return the first three songs in the database to use in playlist tests."""
-    result = await player.async_query("songs", "0", "4", "search:Beatles", "tags:u")
+    result = await player.async_query("songs", "0", "4", "", "tags:u")
     if (
         not result
         or "titles_loop" not in result
@@ -352,9 +352,11 @@ def print_properties(player: Player) -> None:
             print(f"{p}: {prop.fget(player)}")
 
 
-async def test_add_tags(player: Player, broken_player: Player) -> None:
+async def test_add_tags(
+    player: Player, broken_player: Player, test_uris: list[str]
+) -> None:
     """Tests adding a tag to async_update."""
-    await player.async_query("playlist", "loadtracks", "track.titlesearch=blackbird")
+    assert await player.async_load_url(test_uris[0], "play")
     assert await player.async_update(add_tags="D")
     assert not player.remote  # needs a local track for addedTime to have a value
     assert player.current_track is not None
