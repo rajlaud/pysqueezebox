@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+authors = [{ name = "Raj Laud", email = "raj.laud@gmail.com" }]
+classifiers = ["License :: OSI Approved :: Apache Software License"]
+readme = "README.md"
+name = "pysqueezebox"
+version = "0.10.0"
+description = "Asynchronous library to control Logitech Media Server"
+requires-python = ">=3.10"
+dependencies = ["aiohttp", "async-timeout"]
+
+[project.urls]
+Homepage = "https://github.com/rajlaud/pysqueezebox"
+Repository = "https://github.com/rajlaud/pysqueezebox.git"
+
+[tool.mypy]
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "module"
+asyncio_mode = "auto"

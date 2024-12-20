@@ -254,7 +254,7 @@ async def test_server_status(lms: Server) -> None:
     """Test server.async_status() method."""
     status = await lms.async_status("prefs:groupdiscs")
     assert status is not None
-    assert "groupdiscs" in status and status["groupdiscs"] in ["0", "1"]
+    assert "groupdiscs" in status and status["groupdiscs"] in ["0", "1"] # type: ignore
     assert lms.uuid is not None  # should be set by async_status()
 
 

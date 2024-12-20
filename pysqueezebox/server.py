@@ -135,9 +135,13 @@ class Server:
 
             assert isinstance(player["playerid"], str)
             assert isinstance(player["name"], str)
-            _model=player["modelname"] if "modelname" in player else None
-            _model_type=player["model"] if "model" in player else None
-            _firmware=player["firmware"] if "firmware" in player and player["firmware"] != 0 else None
+            _model = player["modelname"] if "modelname" in player else None
+            _model_type = player["model"] if "model" in player else None
+            _firmware = (
+                player["firmware"]
+                if "firmware" in player and player["firmware"] != 0
+                else None
+            )
 
             if search:
                 if search.lower() not in player["name"].lower():
