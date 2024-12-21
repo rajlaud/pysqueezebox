@@ -88,6 +88,14 @@ PlayerStatus = TypedDict(
     total=False,
 )
 
+PlayerPrefs = TypedDict(
+    "PlayerPrefs",
+    {
+        "alarmsEnabled": str,
+    },
+    total=False,
+)
+
 if TYPE_CHECKING:
     from .server import Server
 
@@ -163,6 +171,8 @@ class Player:
         self._property_futures: list[dict[str, Any]] = []
         self._poll: asyncio.Task[Any] | None = None
         self._saved_state: dict[str, Any] | None = None
+
+        self._player_prefs: PlayerPrefs = {}
 
         _creator = None
         _squeezelite = ", Adrian Smith & Ralph Irving"
@@ -479,6 +489,11 @@ class Player:
         return None
 
     @property
+    def alarms_enabled(self) -> bool:
+        """Return the state of the alarms enabled player setting."""
+        return self._player_prefs.get("alarmsEnabled") == "1"
+
+    @property
     def alarm_state(self) -> str | None:
         """Return the current alarm state"""
         return self._status.get("alarm_state")
@@ -642,6 +657,17 @@ class Player:
             self._status.update({"alarms_loop": response["alarms_loop"]})  # type: ignore
         else:
             self._status.update({"alarms_loop": None})
+
+        # check whether the alarmsEnabled preference is set
+        response = await self.async_query("playerpref", "alarmsEnabled", "?")
+        if (
+            response is None
+            or "_p2" not in response
+            or not isinstance(response["_p2"], str)
+        ):
+            _LOGGER.debug("Unable to retrieve alarmsEnabled preference")
+        else:
+            self._player_prefs["alarmsEnabled"] = response["_p2"]
 
         # check if any property futures have been satisfied
         property_futures = []
@@ -1167,3 +1193,11 @@ class Player:
         await self.async_set_power(self._saved_state["power"])
 
         self._saved_state = None
+
+    async def async_set_alarms_enabled(self, enabled: bool) -> bool:
+        """Enable or disable alarms on this player."""
+        if not await self.async_command(
+            "playerpref", "alarmsEnabled", "1" if enabled else "0"
+        ):
+            return False
+        return await self._wait_for_property("alarms_enabled", enabled, TIMEOUT)

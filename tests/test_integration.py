@@ -35,6 +35,7 @@ PlayerState = TypedDict(
         "playlist": list[Track] | None,
         "sync_group": list[str],
         "alarms": list[Alarm],
+        "alarms_enabled": bool,
     },
     total=False,
 )
@@ -110,6 +111,7 @@ async def save_player_state(test_player: Player) -> PlayerState:
         state["sync_group"] = test_player.sync_group
     if test_player.alarms is not None:
         state["alarms"] = test_player.alarms
+    state["alarms_enabled"] = test_player.alarms_enabled
     return state
 
 
@@ -136,6 +138,8 @@ async def restore_player_state(test_player: Player, state: PlayerState) -> None:
                 url=alarm["url"],
                 dow=alarm["dow"],
             )
+    if "alarms_enabled" in state:
+        await test_player.async_set_alarms_enabled(state["alarms_enabled"])
 
 
 @pytest.fixture(name="player", scope="module")
@@ -254,7 +258,7 @@ async def test_server_status(lms: Server) -> None:
     """Test server.async_status() method."""
     status = await lms.async_status("prefs:groupdiscs")
     assert status is not None
-    assert "groupdiscs" in status and status["groupdiscs"] in ["0", "1"] # type: ignore
+    assert "groupdiscs" in status and status["groupdiscs"] in ["0", "1"]  # type: ignore
     assert lms.uuid is not None  # should be set by async_status()
 
 
@@ -348,7 +352,7 @@ def print_properties(player: Player) -> None:
     """Print all properties of player."""
     for p in dir(Player):
         prop = getattr(Player, p)
-        if isinstance(prop, property):
+        if isinstance(prop, property) and prop.fget is not None:
             print(f"{p}: {prop.fget(player)}")
 
 
@@ -677,3 +681,11 @@ async def test_alarms(player: Player) -> None:
     await player.async_delete_alarm(alarm_id)
     await player.async_update()
     assert player.alarms is None
+
+
+async def test_alarms_enabled(player: Player) -> None:
+    """Test alarms enabled property."""
+    await player.async_set_alarms_enabled(True)
+    assert player.alarms_enabled is True
+    await player.async_set_alarms_enabled(False)
+    assert player.alarms_enabled is False
