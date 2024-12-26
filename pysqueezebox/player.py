@@ -17,6 +17,9 @@ _LOGGER = logging.getLogger(__name__)
 # default timeout waiting for server to communicate with player
 TIMEOUT = 5
 
+# default timeout waiting for announcement to complete.  large value to allow pausing etc..  Can be overridden
+ANNOUNCE_TIMEOUT = 600
+
 # how quickly to poll server waiting for command to reach player
 POLL_INTERVAL = 0.75
 
@@ -145,7 +148,6 @@ class Player:
         model: str | None = None,
         model_type: str | None = None,
         firmware: str | None = None,
-        announce_volume: int | None = None,
     ):
         """
         Initialize the SqueezeBox device.
@@ -166,7 +168,8 @@ class Player:
         self._model = model
         self._model_type = model_type
         self._firmware = firmware
-        self._announce_volume = announce_volume
+        self._announce_volume: int | None = None
+        self._announce_timeout: int | None = None
 
         self._property_futures: list[dict[str, Any]] = []
         self._poll: asyncio.Task[Any] | None = None
@@ -714,6 +717,10 @@ class Player:
         """Set the volume level for announcements."""
         self._announce_volume = volume
 
+    def set_announce_timeout(self, timeout: int | None) -> None:
+        """Set the volume level for announcements."""
+        self._announce_timeout = timeout
+
     async def async_set_muting(self, mute: bool, timeout: float = TIMEOUT) -> bool:
         """Mute (true) or unmute (false) squeezebox."""
         mute_numeric = "1" if mute else "0"
@@ -849,6 +856,8 @@ class Player:
 
         if cmd == "announce":
             await self.async_save_player_state()
+            if self._announce_volume:
+                await self.async_set_volume(self._announce_volume)
 
         if cmd in ["play_now", "insert", "add"] and self.playlist_urls:
             await self.async_update()
@@ -866,7 +875,11 @@ class Player:
             await self.async_load_playlist(target_playlist)
             await self.async_index(index)
         else:
-            if not await self.async_command("playlist", cmd, url):
+            if cmd != "announce":
+                _ret = await self.async_command("playlist", cmd, url)
+            else:
+                _ret = await self.async_command("playlist", "play", url, "Announcement")
+            if not _ret:
                 return False
 
         result = await self._wait_for_property(
@@ -874,6 +887,12 @@ class Player:
         )
 
         if cmd == "announce":
+            await self.async_set_repeat("none")
+            await self._wait_for_property(
+                "mode",
+                "stop",
+                self._announce_timeout if self._announce_timeout else ANNOUNCE_TIMEOUT,
+            )
             await self.async_restore_player_state()
 
         return result
@@ -891,13 +910,9 @@ class Player:
         cmd: "play" or "load" - replace current playlist (default)
         cmd: "insert" - adds next in playlist
         cmd: "add" - adds to end of playlist
-        cmd: "announce" - interrupts the current playlist then resumes it after this playlist
         """
         if not playlist_ref:
             return False
-
-        if cmd == "announce":
-            await self.async_save_player_state()
 
         success = True
 
@@ -922,9 +937,6 @@ class Player:
         for item in playlist:
             if not await self.async_load_url(item["url"], "add"):
                 success = False
-
-        if cmd == "announce":
-            await self.async_restore_player_state()
 
         return success
 
@@ -1161,10 +1173,12 @@ class Player:
     async def async_save_player_state(self) -> None:
         """Save the current player state for later restoration."""
         self._saved_state = {
+            "repeat": self.repeat,
             "time": self.time,
             "mode": self.mode,
             "power": self.power,
             "mixer_volume": self.volume,
+            "shuffle": self.shuffle,
         }
         await self.async_command(
             "playlist",
