@@ -905,9 +905,7 @@ class Player:
         playlist = list(playlist_ref)
 
         # remove non-playable items from the playlist
-        for item in playlist:
-            if not item.get("url"):
-                playlist.remove(item)
+        playlist = [item for item in playlist if item.get("url")]
 
         if cmd == "insert":
             for item in reversed(playlist):
