@@ -195,6 +195,8 @@ class Player:
             _creator = "philippe"
         elif model == "SB Player":
             _creator = "Wayne Tam"
+        elif model == "WiiM Player":
+            _creator = "LinkPlay"
         elif (
             "Squeezebox" in model
             or "Transporter" in model
