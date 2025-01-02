@@ -262,7 +262,9 @@ class Server:
         except aiohttp.ServerDisconnectedError as error:
             # LMS handles an unknown player by abruptly disconnecting
             if player:
-                _LOGGER.info("Query run on unknown player %s", player)
+                _LOGGER.info(
+                    "Query run on unknown player %s, or invalid command", player
+                )
             else:
                 _LOGGER.error("Failed communicating with LMS(%s): %s", url, type(error))
             return None
