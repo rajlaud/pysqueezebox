@@ -178,7 +178,7 @@ class Player:
         self._player_prefs: PlayerPrefs = {}
 
         _creator = None
-        _squeezelite = ", Adrian Smith & Ralph Irving"
+        _squeezelite = ", Ralph Irving & Adrian Smith"
         if model is None:
             # make typing happy
             pass
@@ -187,7 +187,7 @@ class Player:
         elif model == "Squeezelite-X":
             _creator = "R G Dawson"
         elif model == "SqueezeLite" or "SqueezePlay" in model:
-            _creator = "Adrian Smith & Ralph Irving"
+            _creator = "Ralph Irving & Adrian Smith"
             _squeezelite = ""
         elif model == "SqueezeLite-HA-Addon":
             _creator = "pssc"
@@ -195,6 +195,8 @@ class Player:
             _creator = "philippe"
         elif model == "SB Player":
             _creator = "Wayne Tam"
+        elif model == "WiiM Player":
+            _creator = "LinkPlay"
         elif (
             "Squeezebox" in model
             or "Transporter" in model
@@ -204,7 +206,7 @@ class Player:
             _creator = "Logitech"
 
         if model_type == "squeezelite":
-            _creator = str(_creator) + _squeezelite
+            _creator = (_creator or "") + _squeezelite
 
         self._creator = _creator
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
