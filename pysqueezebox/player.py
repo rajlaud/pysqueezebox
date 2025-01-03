@@ -206,7 +206,7 @@ class Player:
             _creator = "Logitech"
 
         if model_type == "squeezelite":
-            _creator = _creator or "" + _squeezelite
+            _creator = (_creator or "") + _squeezelite
 
         self._creator = _creator
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
