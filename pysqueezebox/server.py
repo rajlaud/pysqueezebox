@@ -9,11 +9,24 @@ import re
 import urllib
 
 from typing import Any, TypedDict
+from datetime import datetime, UTC
 
 import aiohttp
 import async_timeout
 
-from .const import DEFAULT_PORT, TIMEOUT, QueryResult
+from .const import (
+    DEFAULT_PORT,
+    STATUS_QUERY_VERSION,
+    STATUS_SENSOR_LASTSCAN,
+    STATUS_SENSOR_NEEDSRESTART,
+    STATUS_SENSOR_RESCAN,
+    STATUS_UPDATE_NEWPLUGINS,
+    STATUS_UPDATE_NEWVERSION,
+    TIMEOUT,
+    UPDATE_PLUGINS_RELEASE_SUMMARY,
+    UPDATE_RELEASE_SUMMARY,
+    QueryResult
+)
 from .player import Player, PlayerStatus
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,6 +106,7 @@ class Server:
         self._browse_cache: dict[
             str, tuple[int, int | None, list[QueryResult] | None] | None
         ] = {}  # key: category; value: (lastscan, limit, items)
+        self._newversion_regex_leavefirstsentance = re.compile("\\.[^)]*$")
 
     def __repr__(self) -> str:
         """Return representation of Server object."""
@@ -219,6 +233,68 @@ class Server:
                 self.uuid = self.status["uuid"]
         # todo: add validation
         return self.status
+
+    def _prepare_status_data(self, data: dict) -> dict | None:
+        """Data that needs the changing / creating for HA presentation.
+           we also asure the key exist even if they are None
+           rescan
+           needsrestart
+           lastscan
+           newversion
+           newplugins
+           update_plugins_release_summary
+           update_release_summary
+           """
+        if not data:
+           return data
+
+        # Binary sensors
+        # rescan bool are we rescanning alter poll not present if false
+        data[STATUS_SENSOR_RESCAN] = STATUS_SENSOR_RESCAN in data
+        # needsrestart bool pending lms plugin updates not present if false
+        data[STATUS_SENSOR_NEEDSRESTART] = STATUS_SENSOR_NEEDSRESTART in data
+
+        # Sensors that need special handling
+        # 'lastscan': '1718431678', epoc -> ISO 8601 not always present
+        data[STATUS_SENSOR_LASTSCAN] = (
+            datetime.fromtimestamp(int(data[STATUS_SENSOR_LASTSCAN]), UTC)
+            if STATUS_SENSOR_LASTSCAN in data
+            else None
+        )
+
+        # Updates
+        # newversion str not always present
+        # Sample text:-
+        # 'A new version of Logitech Media Server is available (8.5.2 - 0). <a href="updateinfo.html?installerFile=/var/lib/squeezeboxserver/cache/updates/logitechmediaserver_8.5.2_amd64.deb" target="update">Click here for further information</a>.'
+        # '<ul><li>Version %s - %s is available for installation.</li><li>Log in to your computer running Logitech Media Server (%s).</li><li>Execute <code>%s</code> and follow the instructions.</li></ul>'
+        data[UPDATE_RELEASE_SUMMARY] = (
+            self._newversion_regex_leavefirstsentance.sub(
+                ".", data[STATUS_UPDATE_NEWVERSION]
+            )
+            if STATUS_UPDATE_NEWVERSION in data
+            else None
+        )
+        data[STATUS_UPDATE_NEWVERSION] = (
+            "New Version"
+            if STATUS_UPDATE_NEWVERSION in data
+            else data[STATUS_QUERY_VERSION]
+        )
+
+        # newplugins str not always present
+        # newplugins': 'Plugins have been updated - Restart Required (BBC Sounds)
+        data[UPDATE_PLUGINS_RELEASE_SUMMARY] = (
+            data[STATUS_UPDATE_NEWPLUGINS] + ". "
+            if STATUS_UPDATE_NEWPLUGINS in data
+            else None
+        )
+        data[STATUS_UPDATE_NEWPLUGINS] = (
+            "Updates" if STATUS_UPDATE_NEWPLUGINS in data else "Current"
+        )
+        return data
+
+    async def async_prepared_status(self, *args: str) -> dict[str, Any] | None:
+        """Return server status data prcessed into a well formed dict for HA"""
+        return self._prepare_status_data(await self.async_status(args))
 
     async def async_command(self, *command: str, player: str = "") -> bool:
         """Send a command to the JSON-RPC connection where no result is returned."""
