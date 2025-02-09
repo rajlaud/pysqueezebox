@@ -7,7 +7,7 @@ authors = [{ name = "Raj Laud", email = "raj.laud@gmail.com" }]
 classifiers = ["License :: OSI Approved :: Apache Software License"]
 readme = "README.md"
 name = "pysqueezebox"
-version = "0.11.1"
+version = "0.12.0"
 description = "Asynchronous library to control Logitech Media Server"
 requires-python = ">=3.10"
 dependencies = ["aiohttp", "async-timeout"]
