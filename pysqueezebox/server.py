@@ -302,7 +302,7 @@ class Server:
 
         Parameters:
             category: one of playlists, playlist, albums, album, artists, artist, titles,
-              genres, genre, favorites, favorite, new music, apps, app, app-cmd
+              genres, genre, favorites, favorite, new music, album artists, apps, app, app-cmd
             limit (optional): set maximum number of results
             browse_id (optional): tuple of id type and value
               id type: "album_id", "artist_id", "genre_id", or "track_id"
@@ -359,6 +359,8 @@ class Server:
         query.extend(["0", "1"])
         if category == "new music":
             query = ["albums", "0", "1"]
+        if category == "album artists":
+            query = ["artists", "0", "1"]
         result = await self.async_query(*query)
         if result and "count" in result and isinstance(result["count"], int):
             return result["count"]
@@ -410,6 +412,9 @@ class Server:
             query[0] = "albums"
             query.append("tags:jla")
             query.append("sort:new")
+        elif query[0] == "album artists":
+            query[0] = "artists"
+            query.append("role_id:ALBUMARTIST")
 
         result = await self.async_query(*query, player=player_id)
 
@@ -432,6 +437,8 @@ class Server:
                 items = result["playlisttracks_loop"]
             elif category == "new music":
                 items = result["albums_loop"]
+            elif category == "album artists":
+                items = result["artists_loop"]
             else:
                 items = result[f"{category}_loop"]
             assert isinstance(items, list)
@@ -482,11 +489,13 @@ class Server:
                     query[0] not in ["favorites", "apps", "radios"]
                     and category[:4] != "app-"
                 ):
-                    item["title"] = (
-                        item.pop(category[:-1])
-                        if category != "new music"
-                        else item.pop("album")
-                    )
+                    if category == "new music":
+                        popitem = "album"
+                    elif category == "album artists":
+                        popitem = "artist"
+                    else:
+                        popitem = category[:-1]
+                    item["title"] = item.pop(popitem)
 
                 if "artwork_track_id" in item and isinstance(
                     item["artwork_track_id"], int
@@ -516,7 +525,15 @@ class Server:
     ) -> list[dict[str, Any]] | None:
         """Update cache of library category if needed and return result."""
         if (
-            category not in ["artists", "albums", "titles", "genres", "new music"]
+            category
+            not in [
+                "artists",
+                "albums",
+                "titles",
+                "genres",
+                "new music",
+                "album artists",
+            ]
             or search is not None
         ):
             return await self.async_query_category(
