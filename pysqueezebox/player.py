@@ -125,7 +125,7 @@ def _parse_alarm_params(params: Alarm) -> list[str]:
     for key, value in params.items():
         if key == "time" and params["time"] is not None:
             time = params["time"]
-            parlist.append(f"{key}:{time.hour*3600 + time.minute*60 + time.second}")
+            parlist.append(f"{key}:{time.hour * 3600 + time.minute * 60 + time.second}")
         if key == "dow" and params["dow"] is not None:
             dow = params["dow"]
             parlist.append(f"{key}:{','.join(map(str, dow))}")
@@ -178,25 +178,9 @@ class Player:
         self._player_prefs: PlayerPrefs = {}
 
         _creator = None
-        _squeezelite = ", Ralph Irving & Adrian Smith"
-        if model is None:
-            # make typing happy
-            pass
-        elif model == "SqueezePlayer":
-            _creator = "Stefan Hansel"
-        elif model == "Squeezelite-X":
-            _creator = "R G Dawson"
-        elif model == "SqueezeLite" or "SqueezePlay" in model:
+
+        if "SqueezeLite" in model or "SqueezeLite" in model:
             _creator = "Ralph Irving & Adrian Smith"
-            _squeezelite = ""
-        elif model == "SqueezeLite-HA-Addon":
-            _creator = "pssc"
-        elif model == "RaopBridge" or model == "CastBridge":
-            _creator = "philippe"
-        elif model == "SB Player":
-            _creator = "Wayne Tam"
-        elif model == "WiiM Player":
-            _creator = "LinkPlay"
         elif (
             "Squeezebox" in model
             or "Transporter" in model
@@ -204,9 +188,22 @@ class Player:
             or "Jive" in model
         ):
             _creator = "Logitech"
-
-        if model_type == "squeezelite":
-            _creator = (_creator or "") + _squeezelite
+        else:
+            match model:
+                case "SqueezePlayer":
+                    _creator = "Stefan Hansel"
+                case "Squeezelite-X":
+                    _creator = "R G Dawson"
+                case "SqueezeLite-HA-Addon":
+                    _creator = "pssc"
+                case "RaopBridge":
+                    _creator = "philippe"
+                case "CastBridge":
+                    _creator = "philippe"
+                case "SB Player":
+                    _creator = "Wayne Tam"
+                case "WiiM Player":
+                    _creator = "LinkPlay"
 
         self._creator = _creator
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
