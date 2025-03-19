@@ -178,9 +178,25 @@ class Player:
         self._player_prefs: PlayerPrefs = {}
 
         _creator = None
-
-        if "SqueezeLite" in model or "SqueezeLite" in model:
+        _squeezelite = ", Ralph Irving & Adrian Smith"
+        if model is None:
+            # make typing happy
+            pass
+        elif model == "SqueezePlayer":
+            _creator = "Stefan Hansel"
+        elif model == "Squeezelite-X":
+            _creator = "R G Dawson"
+        elif model == "SqueezeLite" or "SqueezePlay" in model:
             _creator = "Ralph Irving & Adrian Smith"
+            _squeezelite = ""
+        elif model == "SqueezeLite-HA-Addon":
+            _creator = "pssc"
+        elif model == "RaopBridge" or model == "CastBridge":
+            _creator = "philippe"
+        elif model == "SB Player":
+            _creator = "Wayne Tam"
+        elif model == "WiiM Player":
+            _creator = "LinkPlay"
         elif (
             "Squeezebox" in model
             or "Transporter" in model
@@ -188,22 +204,19 @@ class Player:
             or "Jive" in model
         ):
             _creator = "Logitech"
-        else:
-            match model:
-                case "SqueezePlayer":
-                    _creator = "Stefan Hansel"
-                case "Squeezelite-X":
-                    _creator = "R G Dawson"
-                case "SqueezeLite-HA-Addon":
-                    _creator = "pssc"
-                case "RaopBridge":
-                    _creator = "philippe"
-                case "CastBridge":
-                    _creator = "philippe"
-                case "SB Player":
-                    _creator = "Wayne Tam"
-                case "WiiM Player":
-                    _creator = "LinkPlay"
+        elif (
+            (model == "SqueezeLite")
+            or ("SqueezePlay" in model)
+            or (model_type == "squeezelite")
+        ):
+            if firmware and "-pCP" in firmware:
+                _creator = "Paul, Steen, Greg"
+            else:
+                # Unknown or Generic.
+                _creator = "Ralph Irving & Adrian Smith"
+                _squeezelite = ""
+        if model_type == "squeezelite":
+            _creator = (_creator or "") + _squeezelite
 
         self._creator = _creator
         _LOGGER.debug("Creating SqueezeBox object: %s, %s", name, player_id)
