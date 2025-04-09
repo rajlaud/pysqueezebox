@@ -25,7 +25,7 @@ from .const import (
     TIMEOUT,
     UPDATE_PLUGINS_RELEASE_SUMMARY,
     UPDATE_RELEASE_SUMMARY,
-    QueryResult
+    QueryResult,
 )
 from .player import Player, PlayerStatus
 
@@ -236,17 +236,17 @@ class Server:
 
     def _prepare_status_data(self, data: dict) -> dict | None:
         """Data that needs the changing / creating for HA presentation.
-           we also asure the key exist even if they are None
-           rescan
-           needsrestart
-           lastscan
-           newversion
-           newplugins
-           update_plugins_release_summary
-           update_release_summary
-           """
+        we also asure the key exist even if they are None
+        rescan
+        needsrestart
+        lastscan
+        newversion
+        newplugins
+        update_plugins_release_summary
+        update_release_summary
+        """
         if not data:
-           return data
+            return data
 
         # Binary sensors
         # rescan bool are we rescanning alter poll not present if false
@@ -415,7 +415,6 @@ class Server:
         items = await self.async_get_category(
             item_type, limit, search, player_id=player_id
         )
-
         browse["items"] = items
         if category == "title" and items is not None:
             browse["title"] = items[0]["title"]
@@ -504,6 +503,27 @@ class Server:
         try:
             if query[0] in ["favorites"] or category[:4] == "app-":
                 items = result["loop_loop"]  # strange, but what LMS returns
+
+                if not any(item.get("url") for item in items):
+                    # want_url hasn't worked, so try menu:1 instead
+                    query.append("menu:1")
+                    menu_result = await self.async_query(*query, player=player_id)
+                    favorites_urls = {}
+                    for menu_item in menu_result["item_loop"]:
+                        if menu_item.get("presetParams"):
+                            favorites_urls[menu_item["params"]["item_id"]] = (
+                                (
+                                    menu_item["presetParams"]["favorites_url"].replace(
+                                        ":", "://", 1
+                                    )
+                                )
+                                # Spotify returns the url without // but these are required for checking the playlist_urls
+                                if menu_item["presetParams"]["favorites_url"].split(
+                                    ":", 1
+                                )[1][:2]
+                                != "//"
+                                else menu_item["presetParams"]["favorites_url"]
+                            )
             elif category == "apps":
                 items = result["appss_loop"]  # strange, but what LMS returns
             elif category == "radios":
@@ -524,6 +544,8 @@ class Server:
                         continue
 
                     item["title"] = item.pop("name")
+                    if not item.get("url") and favorites_urls.get(item["id"]):
+                        item["url"] = favorites_urls.get(item["id"])
                     if (
                         "url" in item
                         and isinstance(item["url"], str)
@@ -544,6 +566,9 @@ class Server:
                 elif category[:4] == "app-":
                     if item["isaudio"] != 1 and item["hasitems"] != 1:
                         continue
+
+                    if not item.get("url") and favorites_urls.get(item["id"]):
+                        item["url"] = favorites_urls.get(item["id"])
 
                     if "name" in item:
                         item["title"] = item.pop("name")
