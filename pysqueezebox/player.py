@@ -125,7 +125,7 @@ def _parse_alarm_params(params: Alarm) -> list[str]:
     for key, value in params.items():
         if key == "time" and params["time"] is not None:
             time = params["time"]
-            parlist.append(f"{key}:{time.hour*3600 + time.minute*60 + time.second}")
+            parlist.append(f"{key}:{time.hour * 3600 + time.minute * 60 + time.second}")
         if key == "dow" and params["dow"] is not None:
             dow = params["dow"]
             parlist.append(f"{key}:{','.join(map(str, dow))}")
@@ -1152,6 +1152,7 @@ class Player:
         category: str,
         limit: int | None = None,
         browse_id: tuple[str, str] | None = None,
+        search_query: str | None = None,
     ) -> QueryResult | None:
         """
         Browse the music library.
@@ -1159,7 +1160,11 @@ class Player:
         See Server.async_browse for parameters.
         """
         return await self._lms.async_browse(
-            category, limit=limit, browse_id=browse_id, player_id=self._id
+            category,
+            limit=limit,
+            browse_id=browse_id,
+            player_id=self._id,
+            search_query=search_query,
         )
 
     def generate_image_url_from_track_id(self, track_id: int) -> str:
