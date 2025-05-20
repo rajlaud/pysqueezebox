@@ -204,7 +204,17 @@ class Player:
             or "Jive" in model
         ):
             _creator = "Logitech"
-
+        elif (
+            (model == "SqueezeLite")
+            or ("SqueezePlay" in model)
+            or (model_type == "squeezelite")
+        ):
+            if firmware and "-pCP" in firmware:
+                _creator = "Paul, Steen, Greg"
+            else:
+                # Unknown or Generic.
+                _creator = "Ralph Irving & Adrian Smith"
+                _squeezelite = ""
         if model_type == "squeezelite":
             _creator = (_creator or "") + _squeezelite
 
