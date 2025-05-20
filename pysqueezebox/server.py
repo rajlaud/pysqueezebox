@@ -25,7 +25,7 @@ from .const import (
     TIMEOUT,
     UPDATE_PLUGINS_RELEASE_SUMMARY,
     UPDATE_RELEASE_SUMMARY,
-    QueryResult
+    QueryResult,
 )
 from .player import Player, PlayerStatus
 
@@ -236,17 +236,17 @@ class Server:
 
     def _prepare_status_data(self, data: dict) -> dict | None:
         """Data that needs the changing / creating for HA presentation.
-           we also asure the key exist even if they are None
-           rescan
-           needsrestart
-           lastscan
-           newversion
-           newplugins
-           update_plugins_release_summary
-           update_release_summary
-           """
+        we also asure the key exist even if they are None
+        rescan
+        needsrestart
+        lastscan
+        newversion
+        newplugins
+        update_plugins_release_summary
+        update_release_summary
+        """
         if not data:
-           return data
+            return data
 
         # Binary sensors
         # rescan bool are we rescanning alter poll not present if false
@@ -365,6 +365,7 @@ class Server:
         limit: int | None = None,
         browse_id: tuple[str, str] | None = None,
         player_id: str | None = None,
+        search_query: str | None = None,
     ) -> QueryResult | None:
         """
         Browse the music library.
@@ -385,7 +386,9 @@ class Server:
               value: the id
         """
         browse: dict[str, Any] = {}
-        search = f"{browse_id[0]}:{browse_id[1]}" if browse_id else None
+        search_by_id = f"{browse_id[0]}:{browse_id[1]}" if browse_id else None
+
+        query_string = f"search:{search_query}" if search_query else None
 
         app = False
         if category[:4] == "app-":
@@ -394,9 +397,9 @@ class Server:
 
         if (
             category in ["playlist", "album", "artist", "genre", "title", "favorite"]
-        ) and search:
+        ) and search_by_id:
             browse["title"] = await self.async_get_category_title(
-                category, search, player_id=player_id
+                category, search_by_id, player_id=player_id, query_string=query_string
             )
         elif app:
             browse["title"] = category[4:].title()
@@ -413,7 +416,11 @@ class Server:
             item_type = category
 
         items = await self.async_get_category(
-            item_type, limit, search, player_id=player_id
+            item_type,
+            limit,
+            search_by_id,
+            player_id=player_id,
+            query_string=query_string,
         )
 
         browse["items"] = items
@@ -448,6 +455,7 @@ class Server:
         limit: int | None = None,
         search: str | None = None,
         player_id: str | None = None,
+        query_string: str | None = None,
     ) -> list[QueryResult] | None:
         """Return list of entries in category, optionally filtered by search string."""
         if not limit:
@@ -462,7 +470,7 @@ class Server:
             query = [category[4:], "items", "0", f"{limit}", search]
         elif search and "item_id" in search:
             # we have to look up favorites separately
-            query = ["favorites", "items", "0", f"{limit}", search]
+            query = ["favorites", "items", "0", f"{limit}", search, query_string]
 
         else:
             if category in ["favorite", "favorites"]:
@@ -475,6 +483,8 @@ class Server:
             query.extend(["0", f"{limit}"])
             if search:
                 query.append(search)
+            if query_string:
+                query.append(query_string)
 
         # add command-specific suffixes
         if query[0] == "albums":
@@ -598,6 +608,7 @@ class Server:
         limit: int | None = None,
         search: str | None = None,
         player_id: str | None = None,
+        query_string: str | None = None,
     ) -> list[dict[str, Any]] | None:
         """Update cache of library category if needed and return result."""
         if (
@@ -611,9 +622,10 @@ class Server:
                 "album artists",
             ]
             or search is not None
+            or query_string is not None
         ):
             return await self.async_query_category(
-                category, limit, search, player_id=player_id
+                category, limit, search, player_id=player_id, query_string=query_string
             )
 
         status = await self.async_status()
@@ -661,7 +673,11 @@ class Server:
         return result
 
     async def async_get_category_title(
-        self, category: str, search: str | None, player_id: str | None = None
+        self,
+        category: str,
+        search: str | None,
+        player_id: str | None = None,
+        query_string: str | None = None,
     ) -> str | None:
         """
         Search of the category name corresponding to a title.
@@ -672,7 +688,11 @@ class Server:
             )
         else:
             result = await self.async_query_category(
-                f"{category}s", 50, search=search, player_id=player_id
+                f"{category}s",
+                50,
+                search=search,
+                player_id=player_id,
+                query_string=query_string,
             )
 
         if result and len(result) > 0:
