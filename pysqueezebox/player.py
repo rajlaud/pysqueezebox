@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from datetime import time as dt_time
 from typing import TYPE_CHECKING, Any, Callable, TypedDict
 
@@ -514,9 +515,12 @@ class Player:
         return self._status.get("alarm_state")
 
     @property
-    def alarm_next(self) -> int | None:
+    def alarm_next(self) -> datetime | None:
         """Return the time stamp of the next alarm (seconds since the epoch)"""
-        return self._status.get("alarm_next")
+        if self._status.get("alarm_next", 0) > 0:
+            return datetime.fromtimestamp(self._status["alarm_next"], UTC)
+        else:
+            return None
 
     @property
     def playlist_urls(self) -> list[PlaylistEntry] | None:
