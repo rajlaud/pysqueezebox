@@ -510,9 +510,12 @@ class Player:
         return self._player_prefs.get("alarmsEnabled") == "1"
 
     @property
-    def alarm_state(self) -> str | None:
-        """Return the current alarm state"""
-        return self._status.get("alarm_state")
+    def alarm_state(self) -> bool | None:
+        """Return the current alarm state, meaning an upcoming alarm is set or not"""
+        state_str = self._status.get("alarm_state")
+        if state_str is not None:
+            return state_str == "set"
+        return None
 
     @property
     def alarm_next(self) -> datetime | None:
