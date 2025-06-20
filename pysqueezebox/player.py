@@ -510,6 +510,21 @@ class Player:
         return self._player_prefs.get("alarmsEnabled") == "1"
 
     @property
+    def alarm_upcoming(self) -> str | None:
+        """Return if an alarm is upcoming within 24h"""
+        return self._status.get("alarm_state") == "set"
+
+    @property
+    def alarm_active(self) -> str | None:
+        """Return if an alarm is currently active"""
+        return self._status.get("alarm_state") == "active"
+
+    @property
+    def alarm_snooze(self) -> str | None:
+        """Return if an alarm is currently in snooze"""
+        return self._status.get("alarm_state") == "snooze"
+
+    @property
     def alarm_state(self) -> str | None:
         """Return the current alarm state"""
         return self._status.get("alarm_state")
