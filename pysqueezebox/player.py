@@ -489,10 +489,12 @@ class Player:
                 seconds = int(alarm["time"])
                 minutes, seconds = divmod(seconds, 60)
                 hours, minutes = divmod(minutes, 60)
+                dow = list(map(int, alarm["dow"].split(","))) if alarm["dow"] else []
+
                 result.append(
                     {
                         "time": dt_time(second=seconds, minute=minutes, hour=hours),
-                        "dow": list(map(int, alarm["dow"].split(","))),
+                        "dow": dow,
                         "enabled": alarm["enabled"] == "1",
                         "repeat": alarm["repeat"] == "1",
                         "volume": int(alarm["volume"]),
