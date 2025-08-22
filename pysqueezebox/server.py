@@ -303,7 +303,9 @@ class Server:
             return True
         return False
 
-    async def async_query(self, *command: str, player: str = "") -> QueryResult | None:
+    async def async_query(
+        self, *command: str, player: str = "", timeout: float = TIMEOUT
+    ) -> QueryResult | None:
         """Return result of query on the JSON-RPC connection."""
         auth = (
             None
@@ -321,7 +323,7 @@ class Server:
             raise ValueError("async_query() called with Server.session unset")
 
         try:
-            async with async_timeout.timeout(TIMEOUT):
+            async with async_timeout.timeout(timeout):
                 response = await self.session.post(url, data=query_data, auth=auth)
                 self.http_status = response.status
 

@@ -600,9 +600,13 @@ class Player:
         """Send a command to the player."""
         return await self._lms.async_command(*parameters, player=self._id)
 
-    async def async_query(self, *parameters: str) -> QueryResult | None:
+    async def async_query(
+        self, *parameters: str, timeout: float = TIMEOUT
+    ) -> QueryResult | None:
         """Return result of a query specific to this player."""
-        return await self._lms.async_query(*parameters, player=self._id)
+        return await self._lms.async_query(
+            *parameters, player=self._id, timeout=timeout
+        )
 
     async def async_update(self, add_tags: str | None = None) -> bool:
         """
