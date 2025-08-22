@@ -316,6 +316,7 @@ class Server:
         query_data = json.dumps(
             {"id": "1", "method": "slim.request", "params": [player, command]}
         )
+
         _LOGGER.debug("URL: %s Data: %s", url, query_data)
 
         if self.session is None:
