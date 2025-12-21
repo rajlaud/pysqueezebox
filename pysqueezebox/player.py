@@ -833,12 +833,6 @@ class Player:
                 return False
             target_index = self.current_index + int(index)
 
-            _LOGGER.critical(
-                "Target index %s, Playlist_tracks %s",
-                target_index,
-                self.playlist_tracks,
-            )
-
             # index is zero based, playlist_tracks is the number of tracks
             if self.playlist_tracks and target_index >= self.playlist_tracks:
                 target_index = 0
