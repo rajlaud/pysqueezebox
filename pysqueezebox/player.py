@@ -936,6 +936,7 @@ class Player:
         self,
         playlist_ref: Sequence[PlaylistEntry],
         cmd: str = "load",
+        timeout: float = TIMEOUT,
     ) -> bool:
         """
         Play a playlist, of the sort return by the Player.playlist property.
@@ -959,16 +960,16 @@ class Player:
 
         if cmd == "insert":
             for item in reversed(playlist):
-                if not await self.async_load_url(item["url"], cmd):
+                if not await self.async_load_url(item["url"], cmd, timeout):
                     success = False
             return success
 
         if cmd in ["play", "load"]:
-            if not await self.async_load_url(playlist.pop(0)["url"], "play"):
+            if not await self.async_load_url(playlist.pop(0)["url"], "play", timeout):
                 success = False
 
         for item in playlist:
-            if not await self.async_load_url(item["url"], "add"):
+            if not await self.async_load_url(item["url"], "add", timeout):
                 success = False
 
         return success
