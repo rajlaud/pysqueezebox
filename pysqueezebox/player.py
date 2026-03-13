@@ -872,12 +872,29 @@ class Player:
         except asyncio.TimeoutError:
             return False
 
-    async def async_set_power(self, power: bool, timeout: float = TIMEOUT) -> bool:
-        """Turn on or off squeezebox."""
+    async def async_set_power(
+        self, power: bool, play: bool = False, timeout: float = TIMEOUT
+    ) -> bool:
+        """
+        Turn on or off squeezebox.
+
+        If power is True and play is True, also send a play command after
+        powering on. This is useful when you want to ensure the player starts
+        playing immediately upon being turned on (e.g., for HomeKit automations
+        that combine the on/off and play/pause controls into a single action).
+
+        The timeout applies independently to each step: first waiting for the
+        player to reach the desired power state, then (if play=True) waiting
+        for the player to reach the play state.
+        """
         power_numeric = "1" if power else "0"
         if not await self.async_command("power", power_numeric):
             return False
-        return await self._wait_for_property("power", power, timeout)
+        if not await self._wait_for_property("power", power, timeout):
+            return False
+        if power and play:
+            return await self.async_play(timeout)
+        return True
 
     async def async_load_url(
         self,

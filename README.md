@@ -57,3 +57,32 @@ most up-to-date information.
 ## Player() class
 Most of the useful functions are in the Player class. More documentation to
 follow, but in the meantime, the docstrings should be instructive.
+
+## HomeKit Bridge
+
+When the Home Assistant Squeezebox integration is bridged to HomeKit, the
+media player entity is exposed as a set of switches. These switches correspond
+to the following `Player` properties:
+
+| HomeKit switch | Player property | Description |
+|---|---|---|
+| On / Off | `power` | Whether the player is powered on |
+| Play / Pause | `mode` | Whether the player is playing (`"play"`) or paused/stopped |
+| Shuffle | `shuffle` | Shuffle mode: `"none"`, `"song"`, or `"album"` |
+| Mute | `muting` | Whether the player volume is muted |
+
+### Combining On/Off and Play/Pause
+
+If you want turning on the player to immediately start playback (for example,
+to make the HomeKit On/Off switch behave like a play button), use
+`async_set_power` with `play=True`:
+
+```python
+await player.async_set_power(True, play=True)
+```
+
+This powers on the player and then sends a play command in a single call.
+
+In Home Assistant you can achieve the same effect by creating an automation
+that calls `media_player.media_play` whenever the Squeezebox media player
+entity transitions to the `on` state.

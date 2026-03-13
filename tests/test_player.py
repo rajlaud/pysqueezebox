@@ -61,3 +61,49 @@ async def test_verified_pause() -> None:
             [call("pause", "1"), call("pause", "1")], any_order=True
         )
         mock_update.assert_called()
+
+
+async def test_set_power_with_play() -> None:
+    """Test that async_set_power(True, play=True) sends a play command after powering on."""
+    mock_server = AsyncMock(autospec=Server)
+    mock_player = Player(mock_server, "00:11:22:33:44:55", "Test Player")
+
+    with patch.object(
+        Player, "async_command", AsyncMock(return_value=True)
+    ) as mock_command, patch.object(
+        Player, "_wait_for_property", AsyncMock(return_value=True)
+    ):
+        result = await mock_player.async_set_power(True, play=True)
+        assert result is True
+        mock_command.assert_any_call("power", "1")
+        mock_command.assert_any_call("play")
+
+
+async def test_set_power_without_play() -> None:
+    """Test that async_set_power(True) without play=True does not send a play command."""
+    mock_server = AsyncMock(autospec=Server)
+    mock_player = Player(mock_server, "00:11:22:33:44:55", "Test Player")
+
+    with patch.object(
+        Player, "async_command", AsyncMock(return_value=True)
+    ) as mock_command, patch.object(
+        Player, "_wait_for_property", AsyncMock(return_value=True)
+    ):
+        result = await mock_player.async_set_power(True)
+        assert result is True
+        mock_command.assert_called_once_with("power", "1")
+
+
+async def test_set_power_off_with_play_ignored() -> None:
+    """Test that play=True is ignored when powering off."""
+    mock_server = AsyncMock(autospec=Server)
+    mock_player = Player(mock_server, "00:11:22:33:44:55", "Test Player")
+
+    with patch.object(
+        Player, "async_command", AsyncMock(return_value=True)
+    ) as mock_command, patch.object(
+        Player, "_wait_for_property", AsyncMock(return_value=True)
+    ):
+        result = await mock_player.async_set_power(False, play=True)
+        assert result is True
+        mock_command.assert_called_once_with("power", "0")
