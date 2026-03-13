@@ -334,7 +334,12 @@ class Server:
                     )
                     return None
 
-                result_data = await response.json()
+                try:
+                    result_data = await response.json()
+                except UnicodeDecodeError:
+                    raw_data = await response.read()
+                    safe_text = raw_data.decode("utf-8", errors="replace")
+                    result_data = json.loads(safe_text)
 
         except aiohttp.ServerDisconnectedError as error:
             # LMS handles an unknown player by abruptly disconnecting
