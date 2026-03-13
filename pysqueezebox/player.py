@@ -832,6 +832,13 @@ class Player:
                 )
                 return False
             target_index = self.current_index + int(index)
+
+            # index is zero based, playlist_tracks is the number of tracks
+            if self.playlist_tracks and target_index >= self.playlist_tracks:
+                target_index = 0
+
+            if self.playlist_tracks and target_index < 0:
+                target_index = self.playlist_tracks - 1
         else:
             target_index = int(index)
 
