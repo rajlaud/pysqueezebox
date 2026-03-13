@@ -24,10 +24,13 @@ async def test_bad_response():
 
     with patch(
         "pysqueezebox.discovery._unpack_discovery_response", return_value={"addr": ADDR}
-    ), patch.object(pysqueezebox_logger, "info") as logger:
+    ), patch.object(pysqueezebox_logger, "debug") as logger:
         test_protocol = pysqueezebox.discovery.ServerDiscoveryProtocol(None)
         test_protocol.datagram_received(DATA, ADDR)
-        logger.assert_called_once()
+        logger.assert_any_call(
+            "LMS discovery response %s does not contain enough information to connect",
+            {"addr": ADDR},
+        )
 
 
 async def test_callbacks():
