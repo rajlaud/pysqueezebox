@@ -246,8 +246,8 @@ class Player:
 
     @property
     def firmware(self) -> str | None:
-        """Return the player's firmware version if available"""
-        return self._firmware
+        """Return the player's firmware version if available."""
+        return str(self._firmware) if self._firmware is not None else None
 
     @property
     def creator(self) -> str | None:
