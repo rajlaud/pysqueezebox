@@ -173,6 +173,7 @@ class Player:
         self._property_futures: list[dict[str, Any]] = []
         self._poll: asyncio.Task[Any] | None = None
         self._saved_state: dict[str, Any] | None = None
+        self._announcements_in_progress = 0
 
         self._player_prefs: PlayerPrefs = {}
 
@@ -894,12 +895,10 @@ class Player:
         cmd: "add" - adds to end of playlist
         cmd: "announce" - interrupts the current playlist then resumes it after this track
         """
-        index = self.current_index or 0
-
         if cmd == "announce":
-            await self.async_save_player_state()
-            if self._announce_volume:
-                await self.async_set_volume(self._announce_volume)
+            return await self._async_announce_url(url, timeout)
+
+        index = self.current_index or 0
 
         if cmd in ["play_now", "insert", "add"] and self.playlist_urls:
             await self.async_update()
@@ -917,27 +916,44 @@ class Player:
             await self.async_load_playlist(target_playlist)
             await self.async_index(index)
         else:
-            if cmd != "announce":
-                _ret = await self.async_command("playlist", cmd, url)
-            else:
-                _ret = await self.async_command("playlist", "play", url, "Announcement")
-            if not _ret:
+            if not await self.async_command("playlist", cmd, url):
                 return False
 
-        result = await self._wait_for_property(
-            "playlist_urls", target_playlist, timeout
-        )
+        return await self._wait_for_property("playlist_urls", target_playlist, timeout)
 
-        if cmd == "announce":
+    async def _async_announce_url(self, url: str, timeout: float) -> bool:
+        """
+        Interrupt the current playlist with url, then resume it.
+
+        A new announcement can start before an earlier one has finished. Only
+        the first announcement saves the player state and only the last one to
+        finish restores it. Otherwise the later announcement would save the
+        earlier one as the state to restore, and it would play again.
+        """
+        self._announcements_in_progress += 1
+        try:
+            if self._announcements_in_progress == 1:
+                await self.async_save_player_state()
+            if self._announce_volume:
+                await self.async_set_volume(self._announce_volume)
+
+            if not await self.async_command("playlist", "play", url, "Announcement"):
+                return False
+
+            result = await self._wait_for_property(
+                "playlist_urls", [{"url": url}], timeout
+            )
             await self.async_set_repeat("none")
             await self._wait_for_property(
                 "mode",
                 "stop",
                 self._announce_timeout if self._announce_timeout else ANNOUNCE_TIMEOUT,
             )
-            await self.async_restore_player_state()
-
-        return result
+            return result
+        finally:
+            self._announcements_in_progress -= 1
+            if self._announcements_in_progress == 0:
+                await self.async_restore_player_state()
 
     async def async_load_playlist(
         self,
