@@ -1,9 +1,10 @@
+---
 name: Publish to PyPI
 
-on:
+"on":
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -14,31 +15,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
 
-    - name: Install build dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build
+      - name: Check release version
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
 
-    - name: Build package
-      run: python -m build
+          with open("pyproject.toml", "rb") as project_file:
+              version = tomllib.load(project_file)["project"]["version"]
 
-    - name: Store the distribution packages
-      uses: actions/upload-artifact@v4.4.3
-      with:
-        name: python-package-distributions
-        path: dist/
+          expected_tag = f"v{version}"
+          actual_tag = os.environ["GITHUB_REF_NAME"]
+          if actual_tag != expected_tag:
+              raise SystemExit(
+                  f"Release tag {actual_tag!r} does not match "
+                  f"package version; expected {expected_tag!r}."
+              )
+          print(f"Release tag matches package version: {expected_tag}")
+          PY
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Store the distribution packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
 
   publish-to-pypi:
     name: Publish to PyPI
     needs:
-    - build
+      - build
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -47,11 +68,11 @@ jobs:
       id-token: write
 
     steps:
-    - name: Download all the dists
-      uses: actions/download-artifact@v4.1.3
-      with:
-        name: python-package-distributions
-        path: dist/
+      - name: Download all the dists
+        uses: actions/download-artifact@v8
+        with:
+          name: python-package-distributions
+          path: dist/
 
-    - name: Publish distribution to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
