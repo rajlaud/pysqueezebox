@@ -12,6 +12,9 @@ description = "Asynchronous library to control Logitech Media Server"
 requires-python = ">=3.11"
 dependencies = ["aiohttp"]
 
+[project.optional-dependencies]
+test = ["pytest>=8.2", "pytest-asyncio>=0.24"]
+
 [project.urls]
 Homepage = "https://github.com/rajlaud/pysqueezebox"
 Repository = "https://github.com/rajlaud/pysqueezebox.git"
@@ -22,3 +25,4 @@ strict = true
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "module"
 asyncio_mode = "auto"
+markers = ["integration: tests requiring a live Logitech Media Server (--host)"]
