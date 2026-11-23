@@ -57,3 +57,21 @@ most up-to-date information.
 ## Player() class
 Most of the useful functions are in the Player class. More documentation to
 follow, but in the meantime, the docstrings should be instructive.
+
+## Testing
+
+Install the test dependencies and run the unit tests:
+
+```sh
+python3 -m pip install -e ".[test]"
+python3 -m pytest
+```
+
+Live-server tests are skipped unless `--host` is supplied. To run them against
+a Logitech Media Server with connected players:
+
+```sh
+python3 -m pytest -m integration --host 192.168.1.2
+```
+
+These tests temporarily change player state, so use a suitable test system.

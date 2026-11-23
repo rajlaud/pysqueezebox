@@ -1,17 +1,21 @@
 """Common functions and fixtures for pysqueezebox tests."""
 
+from pathlib import Path
+
 import pytest
+
+pytest_plugins = ["pytester"]
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add the commandline options"""
+    """Add the command-line options."""
     parser.addoption(
         "--host",
         type=str,
         default=None,
         action="store",
         dest="HOST",
-        help="the host for the squeezebox server to be used for the integration tests",
+        help="LMS host to use for integration tests",
     )
 
     parser.addoption(
@@ -20,7 +24,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=9000,
         action="store",
         dest="PORT",
-        help="the port for the squeezebox server to be used for the integration tests",
+        help="LMS port to use for integration tests",
     )
 
     parser.addoption(
@@ -51,9 +55,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Mark live-server tests before marker-based selection."""
+    integration_module = Path(__file__).with_name("test_integration.py")
+    for item in items:
+        if item.path == integration_module:
+            item.add_marker(pytest.mark.integration)
+
+
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Skip tests marked 'integration' unless an ip address is given."""
     if "integration" in item.keywords and not item.config.getoption("--host"):
-        pytest.skip(
-            "use --host and a hostname or an ip address to run integration tests."
-        )
+        pytest.skip("Use --host to specify an LMS server for live tests.")
