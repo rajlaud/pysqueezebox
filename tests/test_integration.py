@@ -576,6 +576,31 @@ async def test_player_playlist(
     assert not await player.async_load_playlist(None)  # type: ignore
 
 
+async def test_player_overlapping_announcements(
+    player: Player, test_uris: list[str]
+) -> None:
+    """Test that a second announcement does not leave the first one playing."""
+    assert await player.async_load_url(test_uris[0], "play")
+    assert await player.async_pause()
+
+    # pylint: disable=protected-access
+    announce_timeout = player._announce_timeout
+    player.set_announce_timeout(5)
+    try:
+        first = asyncio.create_task(player.async_load_url(test_uris[1], "announce"))
+        await asyncio.sleep(2)
+        assert await player.async_load_url(test_uris[2], "announce")
+        assert await first
+    finally:
+        player.set_announce_timeout(announce_timeout)
+
+    # The paused playlist from before the announcements is back, and neither
+    # announcement is playing again.
+    await player.async_update()
+    assert player.playlist_urls == [{"url": test_uris[0]}]
+    assert player.mode != "play"
+
+
 async def test_player_coverart(
     player: Player, broken_player: Player, test_album: list[PlaylistEntry]
 ) -> None:
